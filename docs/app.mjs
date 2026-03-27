@@ -86,6 +86,15 @@ function recommendProfileByFileName(fileName) {
   );
 
   if (!matched) {
+    const fallback = PROFILES.find((profile) => profile.id === "generic_auto_header");
+    if (fallback) {
+      recommendedProfileId = fallback.id;
+      profileSelect.value = fallback.id;
+      updateProfileGuide();
+      statusBox.innerHTML = `<strong>${fallback.label}</strong> 형식으로 추천했습니다.<br>파일명만으로 정확한 유형을 찾지 못해 범용 자동 인식 유형을 먼저 선택했습니다.`;
+      return;
+    }
+
     recommendedProfileId = "";
     updateProfileGuide();
     statusBox.innerHTML = "파일을 선택했습니다. <strong>파일 유형</strong>을 확인한 뒤 <strong>변환 시작</strong>을 눌러 주세요.";
@@ -285,6 +294,9 @@ function explainError(error) {
   if (message.includes("헤더 행을 찾지 못했습니다")) {
     return "선택한 파일 유형과 업로드한 파일 형식이 맞지 않습니다. 다른 유형으로 바꿔 다시 시도해 주세요.\n원본 메시지: " + message;
   }
+  if (message.includes("명단으로 보이는 데이터 행을 찾지 못했습니다")) {
+    return "표 안에서 실제 대상자 명단을 찾지 못했습니다. 다른 파일 유형을 선택하거나, 맨 아래 `일반 명단 파일 자동 인식` 유형으로 다시 시도해 주세요.";
+  }
   if (message.includes("지원하지 않는 엑셀 형식")) {
     return "지원하는 확장자는 .xlsx, .xlsm, .xltx, .xltm, .xls 입니다.";
   }
@@ -356,6 +368,9 @@ async function convertFile() {
   try {
     const workbookData = await extractWorkbookData(file);
     const result = runProfile(profile, workbookData, file.name);
+    if (!result.summary?.total_rows) {
+      throw new Error("명단으로 보이는 데이터 행을 찾지 못했습니다.");
+    }
     const blob = createWorkbookDownload(result.headers, result.rowMatrix);
     latestDownloadUrl = URL.createObjectURL(blob);
     downloadLink.href = latestDownloadUrl;

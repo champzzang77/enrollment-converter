@@ -195,6 +195,23 @@ function findHeaderRowByKeywords(rows, requiredKeywords) {
   throw new Error(`헤더 행을 찾지 못했습니다: ${requiredKeywords.join(", ")}`);
 }
 
+function findHeaderRowWithConfig(rows, sourceConfig) {
+  const keywordGroups = Array.isArray(sourceConfig.header_keyword_groups) && sourceConfig.header_keyword_groups.length
+    ? sourceConfig.header_keyword_groups
+    : [sourceConfig.header_keywords || []];
+
+  let lastError = null;
+  for (const keywords of keywordGroups) {
+    try {
+      return findHeaderRowByKeywords(rows, keywords);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("헤더 행을 찾지 못했습니다.");
+}
+
 function getHeaderIndexMap(headerRow) {
   const entries = [];
   headerRow.forEach((cell, index) => {
@@ -349,7 +366,7 @@ function buildRowsHeaderAlias(profile, workbookData) {
     const rawRows = sheetMap.get(sheetName) || [];
     let headerInfo;
     try {
-      headerInfo = findHeaderRowByKeywords(rawRows, headerKeywords);
+      headerInfo = findHeaderRowWithConfig(rawRows, sourceConfig);
     } catch (error) {
       if (sourceConfig.ignore_missing_header) {
         sheetStats.push({
