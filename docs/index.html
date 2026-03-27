@@ -497,7 +497,7 @@
     <section class="hero">
       <div class="eyebrow">LMS Enrollment Converter</div>
       <h1>입과 신청서를<br>LMS 등록 양식으로 변환합니다</h1>
-      <p>파일 유형을 고르고 원본 엑셀을 올리면, 브라우저 안에서 바로 변환한 뒤 LMS 등록용 결과 파일을 내려받을 수 있습니다.</p>
+      <p>원본 엑셀을 올리면 브라우저 안에서 바로 변환한 뒤, LMS 등록용 결과 파일을 내려받을 수 있습니다. 업로드한 파일은 외부 서버로 전송하지 않습니다.</p>
     </section>
 
     <section class="grid">
@@ -516,11 +516,7 @@
           <div class="note">파일명을 보고 가장 비슷한 유형을 추천합니다. 추천이 다르면 직접 바꿔 주세요.</div>
         </div>
 
-        <div class="field">
-          <label for="userNameInput">3. 사용자명 입력</label>
-          <input id="userNameInput" type="text" maxlength="50" placeholder="예: 박차민, 김OO, 운영1팀">
-          <div class="note">최근 사용 내역은 현재 브라우저에서만 보입니다. 업로드한 파일은 서버로 전송되지 않습니다.</div>
-        </div>
+        <div class="note">최근 사용 내역은 현재 브라우저에서만 보이며, 개인정보 보호를 위해 사용자명과 파일명은 저장하지 않습니다.</div>
 
         <div class="guide-box" id="profileGuide">
           <div class="guide-top">
@@ -536,8 +532,8 @@
         </div>
 
         <div class="buttons">
-          <button class="primary" id="convertButton" type="button">4. 변환 시작</button>
-          <a class="download-link secondary disabled" id="downloadLink" href="#" download>5. 결과 파일 다운로드</a>
+          <button class="primary" id="convertButton" type="button">3. 변환 시작</button>
+          <a class="download-link secondary disabled" id="downloadLink" href="#" download>4. 결과 파일 다운로드</a>
         </div>
 
         <div class="status" id="statusBox">
@@ -569,7 +565,7 @@
 
         <article class="card">
           <h2>최근 사용 내역</h2>
-          <p>가장 최근 기록이 맨 위에 보입니다. 이 기록은 현재 브라우저에만 저장됩니다.</p>
+          <p>가장 최근 기록이 맨 위에 보입니다. 이 기록은 현재 브라우저에만 저장되며, 개인정보는 남기지 않습니다.</p>
           <div class="usage-count-grid">
             <div class="usage-count-card">
               <small>누적 사용 횟수</small>
@@ -586,7 +582,7 @@
     </section>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="./vendor/xlsx.full.min.js"></script>
   <script type="module" src="./app.mjs"></script>
 </body>
 </html>

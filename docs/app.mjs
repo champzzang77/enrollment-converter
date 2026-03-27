@@ -1,12 +1,12 @@
 import { PROFILES } from "./data.mjs";
 import { runProfile } from "./engine.mjs";
 
-const STORAGE_KEY = "enrollment-upload-static-usage-log-v1";
+const STORAGE_KEY = "enrollment-upload-static-usage-log-v2";
+const LEGACY_STORAGE_KEYS = ["enrollment-upload-static-usage-log-v1"];
 const ALLOWED_EXTENSIONS = new Set([".xlsx", ".xlsm", ".xltx", ".xltm", ".xls"]);
 
 const profileSelect = document.getElementById("profileSelect");
 const fileInput = document.getElementById("fileInput");
-const userNameInput = document.getElementById("userNameInput");
 const convertButton = document.getElementById("convertButton");
 const downloadLink = document.getElementById("downloadLink");
 const statusBox = document.getElementById("statusBox");
@@ -26,6 +26,16 @@ const todayUsageCount = document.getElementById("todayUsageCount");
 
 let latestDownloadUrl = "";
 let recommendedProfileId = "";
+
+function clearLegacyUsageData() {
+  LEGACY_STORAGE_KEYS.forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (_error) {
+      // Ignore storage cleanup issues.
+    }
+  });
+}
 
 function getSelectedProfile() {
   return PROFILES.find((item) => item.id === profileSelect.value) || null;
@@ -201,14 +211,14 @@ function renderRecentUsage(items) {
 
     const main = document.createElement("div");
     main.className = "log-main";
-    main.textContent = `${item.user_name || "사용자명 없음"} | ${item.profile_label || "유형 정보 없음"}`;
+    main.textContent = item.profile_label || "유형 정보 없음";
 
     const sub = document.createElement("div");
     sub.className = "log-sub";
     if (isSuccess) {
-      sub.textContent = `파일: ${item.file_name || "파일명 없음"} | 변환 행 수: ${item.total_rows ?? "-"}`;
+      sub.textContent = `변환 행 수: ${item.total_rows ?? "-"} | 이메일 공란 처리: ${item.email_undefined ?? "-"} | 휴대폰 공란 처리: ${item.mobile_undefined ?? "-"}`;
     } else {
-      sub.textContent = `파일: ${item.file_name || "파일명 없음"} | 오류: ${item.error || "알 수 없는 오류"}`;
+      sub.textContent = `오류: ${item.error || "알 수 없는 오류"}`;
     }
 
     entry.appendChild(top);
@@ -288,9 +298,6 @@ function createWorkbookDownload(headers, rowMatrix) {
 
 function explainError(error) {
   const message = String(error?.message || error || "");
-  if (message.includes("사용자명을 입력")) {
-    return "사용 내역을 구분할 수 있도록 사용자명을 먼저 입력해 주세요.";
-  }
   if (message.includes("헤더 행을 찾지 못했습니다")) {
     return "선택한 파일 유형과 업로드한 파일 형식이 맞지 않습니다. 다른 유형으로 바꿔 다시 시도해 주세요.\n원본 메시지: " + message;
   }
@@ -306,13 +313,11 @@ function explainError(error) {
   return "변환 중 오류가 발생했습니다.\n원본 메시지: " + message;
 }
 
-function saveSuccessLog(profile, fileName, summary) {
+function saveSuccessLog(profile, summary) {
   saveUsageEntry({
     timestamp: createTimestamp(),
-    user_name: String(userNameInput.value || "").trim(),
     profile_id: profile.id,
     profile_label: profile.label,
-    file_name: fileName,
     status: "success",
     total_rows: summary.total_rows,
     email_undefined: summary.email_undefined,
@@ -320,27 +325,25 @@ function saveSuccessLog(profile, fileName, summary) {
   });
 }
 
-function saveErrorLog(profile, fileName, errorMessage) {
+function saveErrorLog(profile, errorMessage) {
   saveUsageEntry({
     timestamp: createTimestamp(),
-    user_name: String(userNameInput.value || "").trim(),
     profile_id: profile?.id || "",
     profile_label: profile?.label || "유형 정보 없음",
-    file_name: fileName || "",
     status: "error",
     error: errorMessage,
   });
 }
 
-function buildSuccessStatus(fileName, summary) {
+function buildSuccessStatus(summary) {
   const unresolvedCount = (summary.sheet_stats || []).reduce(
     (total, item) => total + ((item.unresolved_course_names || []).length),
     0
   );
   if (unresolvedCount > 0) {
-    return `<strong>변환은 완료되었습니다.</strong><br>${fileName} 파일을 처리했지만 과정코드가 연결되지 않은 항목이 ${unresolvedCount}건 있습니다. 요약을 확인한 뒤 결과 파일을 내려받아 주세요.`;
+    return `<strong>변환은 완료되었습니다.</strong><br>과정코드가 연결되지 않은 항목이 ${unresolvedCount}건 있습니다. 요약을 확인한 뒤 결과 파일을 내려받아 주세요.`;
   }
-  return `<strong>변환이 완료되었습니다.</strong><br>${fileName} 파일이 준비되었습니다. 아래 버튼으로 결과 파일을 내려받아 주세요.`;
+  return "<strong>변환이 완료되었습니다.</strong><br>결과 파일이 준비되었습니다. 아래 버튼으로 내려받아 주세요.";
 }
 
 async function convertFile() {
@@ -352,13 +355,6 @@ async function convertFile() {
 
   if (!file) {
     statusBox.textContent = "먼저 변환할 엑셀 파일을 선택해 주세요.";
-    return;
-  }
-
-  if (!String(userNameInput.value || "").trim()) {
-    statusBox.textContent = "사용자명을 먼저 입력해 주세요.";
-    errorBox.value = "사용 내역을 구분할 수 있도록 사용자명을 입력해 주세요.";
-    userNameInput.focus();
     return;
   }
 
@@ -377,14 +373,14 @@ async function convertFile() {
     downloadLink.download = result.outputFileName;
     downloadLink.classList.remove("disabled");
     setSummary(result.summary);
-    statusBox.innerHTML = buildSuccessStatus(file.name, result.summary);
-    saveSuccessLog(profile, file.name, result.summary);
+    statusBox.innerHTML = buildSuccessStatus(result.summary);
+    saveSuccessLog(profile, result.summary);
     refreshUsageView();
   } catch (error) {
     const friendlyMessage = explainError(error);
     statusBox.textContent = "변환에 실패했습니다. 아래 오류 안내를 확인해 주세요.";
     errorBox.value = friendlyMessage;
-    saveErrorLog(profile, file?.name, friendlyMessage);
+    saveErrorLog(profile, friendlyMessage);
     refreshUsageView();
   } finally {
     convertButton.disabled = false;
@@ -403,5 +399,6 @@ fileInput.addEventListener("change", () => {
 });
 convertButton.addEventListener("click", convertFile);
 
+clearLegacyUsageData();
 renderProfiles();
 refreshUsageView();
