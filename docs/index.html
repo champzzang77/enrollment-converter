@@ -466,6 +466,52 @@
       line-height: 1.6;
     }
 
+    .security-footer {
+      margin-top: 18px;
+      padding: 22px 24px;
+      border-radius: var(--radius);
+      background: rgba(255, 251, 245, 0.72);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      animation: rise 740ms ease-out both;
+    }
+
+    .security-footer h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-family: "Iowan Old Style", "Palatino Linotype", serif;
+    }
+
+    .security-footer p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .security-points {
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .security-points li {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.76);
+      border: 1px solid rgba(24, 51, 61, 0.08);
+      color: var(--ink);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .security-points strong {
+      display: inline-block;
+      margin-right: 6px;
+    }
+
     @keyframes rise {
       from {
         opacity: 0;
@@ -579,6 +625,16 @@
           <div id="recentUsageBox" class="recent-usage-panel empty-log">아직 이 브라우저에 저장된 기록이 없습니다.</div>
         </article>
       </div>
+    </section>
+
+    <section class="security-footer">
+      <h2>보안 안내</h2>
+      <p>이 사이트는 개인정보가 포함된 엑셀을 다루는 점을 고려해, 아래와 같은 방식으로 보안성을 높였습니다.</p>
+      <ul class="security-points">
+        <li><strong>브라우저 내부 처리</strong> 업로드한 파일은 각 사용자 브라우저 안에서 바로 변환되며, 별도 서버에 저장하거나 전송하지 않습니다.</li>
+        <li><strong>로그 최소화</strong> 최근 사용 내역은 현재 브라우저에만 보관되며, 사용자명과 파일명은 저장하지 않습니다.</li>
+        <li><strong>외부 스크립트 최소화</strong> 변환에 필요한 엑셀 라이브러리는 사이트 내부 파일을 사용해 외부 CDN 의존을 줄였습니다.</li>
+      </ul>
     </section>
   </main>
 
