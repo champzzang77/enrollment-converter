@@ -496,20 +496,14 @@
   <main class="shell">
     <section class="hero">
       <div class="eyebrow">Enrollment Upload Studio</div>
-      <h1>입과 업로드 파일을<br>한 번에 변환합니다</h1>
-      <p>입과신청서를 lms일괄등록양식으로 변환합니다.</p>
+      <h1>입과 신청서를<br>LMS 등록 양식으로 변환합니다</h1>
+      <p>원본 엑셀을 올리면 브라우저 안에서 바로 처리하고, 결과 파일을 바로 내려받을 수 있습니다.</p>
     </section>
 
     <section class="grid">
       <article class="card">
-        <h2>변환 실행</h2>
-        <p>1. 파일을 올리고 2. 추천된 유형을 확인한 뒤 3. 변환하기를 누르면 됩니다.</p>
-
-        <div class="field">
-          <label for="profileSelect">2. 파일 유형 선택</label>
-          <select id="profileSelect"></select>
-          <div class="note">잘 모르겠으면 먼저 파일을 올려 보세요. 파일명을 보고 자동 추천합니다.</div>
-        </div>
+        <h2>파일 변환</h2>
+        <p>원본 파일을 올리면 가장 비슷한 유형을 추천합니다. 맞는지 확인한 뒤 변환을 시작해 주세요.</p>
 
         <div class="field">
           <label for="fileInput">1. 원본 파일 올리기</label>
@@ -517,9 +511,15 @@
         </div>
 
         <div class="field">
-          <label for="userNameInput">사용자명</label>
+          <label for="profileSelect">2. 파일 유형 확인</label>
+          <select id="profileSelect"></select>
+          <div class="note">파일명을 보고 가장 비슷한 유형을 추천합니다. 추천이 다르면 직접 바꿔 주세요.</div>
+        </div>
+
+        <div class="field">
+          <label for="userNameInput">3. 사용자명 입력</label>
           <input id="userNameInput" type="text" maxlength="50" placeholder="예: 박차민, 김OO, 운영1팀">
-          <div class="note">최근 사용 기록은 현재 브라우저에만 저장됩니다. 서버 없이 브라우저 안에서 바로 변환합니다.</div>
+          <div class="note">최근 사용 내역은 현재 브라우저에서만 보입니다. 업로드한 파일은 서버로 전송되지 않습니다.</div>
         </div>
 
         <div class="guide-box" id="profileGuide">
@@ -529,15 +529,15 @@
           </div>
           <div class="guide-copy" id="guideDescription">선택한 유형에 대한 설명이 여기에 표시됩니다.</div>
           <div class="guide-meta">
-            <div><strong>이럴 때</strong><span id="guideUseWhen">-</span></div>
-            <div><strong>예시 파일</strong><span id="guideExample">-</span></div>
+            <div><strong>추천 상황</strong><span id="guideUseWhen">-</span></div>
+            <div><strong>예시 파일명</strong><span id="guideExample">-</span></div>
           </div>
           <ul class="hint-list" id="guideHints"></ul>
         </div>
 
         <div class="buttons">
-          <button class="primary" id="convertButton" type="button">3. 변환하기</button>
-          <a class="download-link secondary disabled" id="downloadLink" href="#" download>4. 결과 다운로드</a>
+          <button class="primary" id="convertButton" type="button">4. 변환 시작</button>
+          <a class="download-link secondary disabled" id="downloadLink" href="#" download>5. 결과 파일 다운로드</a>
         </div>
 
         <div class="status" id="statusBox">
@@ -546,15 +546,15 @@
 
         <div class="summary-grid">
           <div class="stat">
-            <small>총 행 수</small>
+            <small>변환 행 수</small>
             <strong id="totalRows">-</strong>
           </div>
           <div class="stat">
-            <small>이메일 undefined</small>
+            <small>이메일 공란 처리</small>
             <strong id="emailUndefined">-</strong>
           </div>
           <div class="stat">
-            <small>휴대폰 undefined</small>
+            <small>휴대폰 공란 처리</small>
             <strong id="mobileUndefined">-</strong>
           </div>
         </div>
@@ -562,14 +562,14 @@
 
       <div class="stack">
         <article class="card">
-          <h2>오류 메모</h2>
-          <p>유형이 맞지 않거나 처리 중 문제가 생기면 쉬운 설명을 여기에 보여줍니다.</p>
+          <h2>오류 안내</h2>
+          <p>파일 형식이 맞지 않거나 처리 중 문제가 생기면 이해하기 쉬운 설명을 여기에 보여드립니다.</p>
           <textarea id="errorBox" readonly placeholder="오류가 없으면 이 칸은 비어 있습니다."></textarea>
         </article>
 
         <article class="card">
-          <h2>최근 사용 기록</h2>
-          <p>가장 최근 사용이 맨 위에 보입니다. 시간은 연-월-일 시:분:초까지 표시됩니다.</p>
+          <h2>최근 사용 내역</h2>
+          <p>가장 최근 기록이 맨 위에 보입니다. 이 기록은 현재 브라우저에만 저장됩니다.</p>
           <div class="usage-count-grid">
             <div class="usage-count-card">
               <small>누적 사용 횟수</small>

@@ -88,14 +88,14 @@ function recommendProfileByFileName(fileName) {
   if (!matched) {
     recommendedProfileId = "";
     updateProfileGuide();
-    statusBox.innerHTML = "파일을 선택했습니다. <strong>파일 유형</strong>을 확인한 뒤 변환하기를 눌러 주세요.";
+    statusBox.innerHTML = "파일을 선택했습니다. <strong>파일 유형</strong>을 확인한 뒤 <strong>변환 시작</strong>을 눌러 주세요.";
     return;
   }
 
   recommendedProfileId = matched.id;
   profileSelect.value = matched.id;
   updateProfileGuide();
-  statusBox.innerHTML = `<strong>${matched.label}</strong> 유형으로 자동 추천했습니다.<br>예시 파일명과 특징이 맞는지만 한 번 확인해 주세요.`;
+  statusBox.innerHTML = `<strong>${matched.label}</strong> 형식으로 추천했습니다.<br>예시 파일명과 설명이 맞는지만 한 번 확인해 주세요.`;
 }
 
 function setSummary(summary) {
@@ -162,7 +162,7 @@ function renderUsageCounts(counts) {
 function renderRecentUsage(items) {
   if (!Array.isArray(items) || items.length === 0) {
     recentUsageBox.className = "recent-usage-panel empty-log";
-    recentUsageBox.textContent = "아직 이 브라우저에 저장된 기록이 없습니다.";
+    recentUsageBox.textContent = "아직 이 브라우저에 저장된 사용 내역이 없습니다.";
     renderUsageCounts({ total_count: 0, today_count: 0 });
     return;
   }
@@ -192,12 +192,12 @@ function renderRecentUsage(items) {
 
     const main = document.createElement("div");
     main.className = "log-main";
-    main.textContent = `${item.user_name || "이름 없음"} | ${item.profile_label || "유형 정보 없음"}`;
+    main.textContent = `${item.user_name || "사용자명 없음"} | ${item.profile_label || "유형 정보 없음"}`;
 
     const sub = document.createElement("div");
     sub.className = "log-sub";
     if (isSuccess) {
-      sub.textContent = `파일: ${item.file_name || "파일명 없음"} | 행 수: ${item.total_rows ?? "-"}`;
+      sub.textContent = `파일: ${item.file_name || "파일명 없음"} | 변환 행 수: ${item.total_rows ?? "-"}`;
     } else {
       sub.textContent = `파일: ${item.file_name || "파일명 없음"} | 오류: ${item.error || "알 수 없는 오류"}`;
     }
@@ -280,10 +280,10 @@ function createWorkbookDownload(headers, rowMatrix) {
 function explainError(error) {
   const message = String(error?.message || error || "");
   if (message.includes("사용자명을 입력")) {
-    return "로그 확인을 위해 사용자명을 먼저 입력해 주세요.";
+    return "사용 내역을 구분할 수 있도록 사용자명을 먼저 입력해 주세요.";
   }
   if (message.includes("헤더 행을 찾지 못했습니다")) {
-    return "선택한 파일 유형과 업로드한 파일 형식이 맞지 않습니다. 다른 유형을 선택했는지 먼저 확인해 주세요.\n원본 메시지: " + message;
+    return "선택한 파일 유형과 업로드한 파일 형식이 맞지 않습니다. 다른 유형으로 바꿔 다시 시도해 주세요.\n원본 메시지: " + message;
   }
   if (message.includes("지원하지 않는 엑셀 형식")) {
     return "지원하는 확장자는 .xlsx, .xlsm, .xltx, .xltm, .xls 입니다.";
@@ -326,9 +326,9 @@ function buildSuccessStatus(fileName, summary) {
     0
   );
   if (unresolvedCount > 0) {
-    return `<strong>변환은 완료되었습니다.</strong><br>${fileName} 파일을 처리했지만 과정코드 미매핑 항목 ${unresolvedCount}건이 있습니다. 요약을 함께 확인해 주세요.`;
+    return `<strong>변환은 완료되었습니다.</strong><br>${fileName} 파일을 처리했지만 과정코드가 연결되지 않은 항목이 ${unresolvedCount}건 있습니다. 요약을 확인한 뒤 결과 파일을 내려받아 주세요.`;
   }
-  return `<strong>변환이 완료되었습니다.</strong><br>${fileName} 파일이 성공적으로 처리되었습니다.`;
+  return `<strong>변환이 완료되었습니다.</strong><br>${fileName} 파일이 준비되었습니다. 아래 버튼으로 결과 파일을 내려받아 주세요.`;
 }
 
 async function convertFile() {
@@ -345,13 +345,13 @@ async function convertFile() {
 
   if (!String(userNameInput.value || "").trim()) {
     statusBox.textContent = "사용자명을 먼저 입력해 주세요.";
-    errorBox.value = "로그 확인을 위해 사용자명을 입력해 주세요.";
+    errorBox.value = "사용 내역을 구분할 수 있도록 사용자명을 입력해 주세요.";
     userNameInput.focus();
     return;
   }
 
   convertButton.disabled = true;
-  statusBox.innerHTML = "<strong>변환 중입니다.</strong><br>브라우저 안에서 파일을 읽고 결과를 생성하고 있습니다.";
+  statusBox.innerHTML = "<strong>변환 중입니다.</strong><br>브라우저 안에서 파일을 읽고 결과 파일을 만들고 있습니다.";
 
   try {
     const workbookData = await extractWorkbookData(file);
@@ -367,7 +367,7 @@ async function convertFile() {
     refreshUsageView();
   } catch (error) {
     const friendlyMessage = explainError(error);
-    statusBox.textContent = "변환에 실패했습니다. 오류 메모를 확인해 주세요.";
+    statusBox.textContent = "변환에 실패했습니다. 아래 오류 안내를 확인해 주세요.";
     errorBox.value = friendlyMessage;
     saveErrorLog(profile, file?.name, friendlyMessage);
     refreshUsageView();
