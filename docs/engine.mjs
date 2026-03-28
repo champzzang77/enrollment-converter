@@ -65,6 +65,10 @@ function normalizeDefaults(defaults = {}) {
   );
 }
 
+function normalizeKeywordList(values = []) {
+  return values.map((value) => normalizeHeader(value)).filter(Boolean);
+}
+
 function normalizeLookup(lookup = {}) {
   return Object.fromEntries(
     Object.entries(lookup).map(([key, value]) => [normalizeMatchKey(key), text(value)])
@@ -254,6 +258,50 @@ function scanRowLabelValue(rows, labels) {
   return null;
 }
 
+function validateFixedColumnLayout(rows, sourceConfig, sheetName) {
+  const validation = sourceConfig.layout_validation;
+  if (!validation?.column_checks?.length) {
+    return;
+  }
+
+  const derivedHeaderRow = Number(sourceConfig.start_row || 2) - 1;
+  const headerRowNumber = Number(validation.header_row || derivedHeaderRow);
+  const headerRowIndex = headerRowNumber - 1;
+  const headerRow = rows[headerRowIndex] || [];
+  const mismatchMessages = [];
+
+  validation.column_checks.forEach((check) => {
+    const columnIndex = columnRefToIndex(check.column);
+    const rawHeader = text(columnIndex < headerRow.length ? headerRow[columnIndex] : null) || "";
+    const normalizedHeader = normalizeHeader(rawHeader);
+    const includes = normalizeKeywordList(check.includes || []);
+    const anyOf = normalizeKeywordList(check.any_of || []);
+
+    const includesMatched = includes.every((keyword) => normalizedHeader.includes(keyword));
+    const anyOfMatched = !anyOf.length || anyOf.some((keyword) => normalizedHeader.includes(keyword));
+
+    if (!includesMatched || !anyOfMatched) {
+      const expectedParts = [];
+      if (includes.length) {
+        expectedParts.push(`포함: ${check.includes.join(", ")}`);
+      }
+      if (anyOf.length) {
+        expectedParts.push(`다음 중 하나: ${check.any_of.join(", ")}`);
+      }
+      mismatchMessages.push(
+        `${check.column}열 기대값(${expectedParts.join(" / ")}) != 실제값(${rawHeader || "빈칸"})`
+      );
+    }
+  });
+
+  if (mismatchMessages.length) {
+    throw new Error(
+      `선택한 파일 유형과 업로드한 파일 구조가 다릅니다. ${sheetName} 시트의 헤더를 확인해 주세요.\n` +
+      mismatchMessages.join("\n")
+    );
+  }
+}
+
 function buildRowsFixedColumns(profile, workbookData, courseLookup) {
   const sourceConfig = profile.source;
   const headers = profile.guide_headers || GUIDE_HEADERS;
@@ -274,6 +322,9 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
     sourceConfig.include_sheets || [],
     sourceConfig.skip_sheets || []
   );
+  if (!selectedSheets.length) {
+    throw new Error("선택한 파일 유형과 업로드한 파일 구조가 다릅니다. 필요한 시트를 찾지 못했습니다.");
+  }
   const startRow = Number(sourceConfig.start_row || 2);
   const copyIfMissing = profile.copy_if_missing || {};
   const undefinedIfMissing = profile.undefined_if_missing || [];
@@ -283,6 +334,7 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
 
   for (const sheetName of selectedSheets) {
     const rawRows = sheetMap.get(sheetName) || [];
+    validateFixedColumnLayout(rawRows, sourceConfig, sheetName);
     const { expansions, unresolvedNames } = resolveCourseExpansions(sheetName, sourceConfig, courseLookup);
     const perSheetDefaults = {
       ...defaults,
@@ -358,6 +410,9 @@ function buildRowsHeaderAlias(profile, workbookData) {
   const headerKeywords = sourceConfig.header_keywords || [];
   const sheetContextLabels = sourceConfig.sheet_context_labels || {};
   const selectedSheets = chooseSheetNames(sheetNames, sourceConfig);
+  if (!selectedSheets.length) {
+    throw new Error("선택한 파일 유형과 업로드한 파일 구조가 다릅니다. 필요한 시트를 찾지 못했습니다.");
+  }
 
   const rows = [];
   const sheetStats = [];

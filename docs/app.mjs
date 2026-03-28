@@ -321,6 +321,9 @@ function createWorkbookDownload(headers, rowMatrix) {
 
 function explainError(error) {
   const message = String(error?.message || error || "");
+  if (message.includes("선택한 파일 유형과 업로드한 파일 구조가 다릅니다")) {
+    return "선택한 파일 유형과 실제 엑셀 구조가 맞지 않아 변환을 중단했습니다.\n파일 유형을 다시 선택한 뒤 시도해 주세요.\n원본 메시지: " + message;
+  }
   if (message.includes("헤더 행을 찾지 못했습니다")) {
     return "선택한 파일 유형과 업로드한 파일 형식이 맞지 않습니다. 다른 유형으로 바꿔 다시 시도해 주세요.\n원본 메시지: " + message;
   }

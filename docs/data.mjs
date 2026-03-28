@@ -76,6 +76,16 @@ export const PROFILES = [
       include_sheets: ["입과양식"],
       start_row: 19,
       required_any: ["course_code", "name", "user_id"],
+      layout_validation: {
+        header_row: 18,
+        column_checks: [
+          { column: "C", includes: ["과정코드"] },
+          { column: "E", includes: ["이름"] },
+          { column: "F", includes: ["ID"], any_of: ["희망"] },
+          { column: "K", includes: ["이메일"] },
+          { column: "L", includes: ["휴대폰"] },
+        ],
+      },
       column_map: {
         course_code: "C",
         name: "E",
@@ -142,6 +152,17 @@ export const PROFILES = [
       mode: "fixed_columns",
       start_row: 19,
       required_any: ["user_id", "name"],
+      layout_validation: {
+        header_row: 18,
+        column_checks: [
+          { column: "D", includes: ["사원번호"] },
+          { column: "F", includes: ["이름"] },
+          { column: "H", includes: ["이메일"] },
+          { column: "I", includes: ["휴대폰"] },
+          { column: "J", includes: ["회사명"] },
+          { column: "K", includes: ["근무부서"] },
+        ],
+      },
       column_map: {
         user_id: "D",
         name: "F",
