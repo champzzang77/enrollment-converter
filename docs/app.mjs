@@ -260,6 +260,34 @@ async function readFileAsArrayBuffer(file) {
   });
 }
 
+function extractCellValue(sheet, rowIndex, columnIndex) {
+  const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+  const cell = sheet[cellRef];
+  return cell && Object.prototype.hasOwnProperty.call(cell, "v") ? cell.v : null;
+}
+
+function buildSheetRowsPreservingLayout(sheet) {
+  const ref = sheet["!ref"];
+  if (!ref) {
+    return [];
+  }
+
+  const range = XLSX.utils.decode_range(ref);
+  const rows = [];
+
+  // We intentionally start from A1 so fixed Excel column letters like C, K, T
+  // continue to match even when the worksheet begins with fully blank columns.
+  for (let rowIndex = 0; rowIndex <= range.e.r; rowIndex += 1) {
+    const row = [];
+    for (let columnIndex = 0; columnIndex <= range.e.c; columnIndex += 1) {
+      row.push(extractCellValue(sheet, rowIndex, columnIndex));
+    }
+    rows.push(row);
+  }
+
+  return rows;
+}
+
 async function extractWorkbookData(file) {
   ensureSupportedFile(file);
   const data = await readFileAsArrayBuffer(file);
@@ -271,12 +299,7 @@ async function extractWorkbookData(file) {
 
   return workbook.SheetNames.map((sheetName) => ({
     name: sheetName,
-    rows: XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
-      header: 1,
-      raw: true,
-      defval: null,
-      blankrows: true,
-    }),
+    rows: buildSheetRowsPreservingLayout(workbook.Sheets[sheetName]),
   }));
 }
 
