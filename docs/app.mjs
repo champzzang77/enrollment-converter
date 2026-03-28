@@ -87,11 +87,18 @@ function updateProfileGuide() {
   }
 }
 
+function normalizeFileNameMatch(value) {
+  return String(value || "")
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
 function recommendProfileByFileName(fileName) {
-  const normalizedName = String(fileName || "").toLowerCase();
+  const normalizedName = normalizeFileNameMatch(fileName);
   const matched = PROFILES.find((profile) =>
     (profile.filename_keywords || []).some((keyword) =>
-      normalizedName.includes(String(keyword).toLowerCase())
+      normalizedName.includes(normalizeFileNameMatch(keyword))
     )
   );
 
@@ -322,10 +329,10 @@ function createWorkbookDownload(headers, rowMatrix) {
 function explainError(error) {
   const message = String(error?.message || error || "");
   if (message.includes("선택한 파일 유형과 업로드한 파일 구조가 다릅니다")) {
-    return "선택한 파일 유형과 실제 엑셀 구조가 맞지 않아 변환을 중단했습니다.\n파일 유형을 다시 선택한 뒤 시도해 주세요.\n원본 메시지: " + message;
+    return "선택한 파일 유형이 현재 파일과 맞지 않습니다.\n파일 유형을 바꿔서 다시 시도해 주세요.";
   }
   if (message.includes("헤더 행을 찾지 못했습니다")) {
-    return "선택한 파일 유형과 업로드한 파일 형식이 맞지 않습니다. 다른 유형으로 바꿔 다시 시도해 주세요.\n원본 메시지: " + message;
+    return "선택한 파일 유형이 현재 파일과 맞지 않습니다.\n파일 유형을 바꿔서 다시 시도해 주세요.";
   }
   if (message.includes("명단으로 보이는 데이터 행을 찾지 못했습니다")) {
     return "표 안에서 실제 대상자 명단을 찾지 못했습니다. 다른 파일 유형을 선택하거나, 맨 아래 `일반 명단 파일 자동 인식` 유형으로 다시 시도해 주세요.";
