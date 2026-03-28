@@ -335,7 +335,7 @@ function explainError(error) {
     return "선택한 파일 유형이 현재 파일과 맞지 않습니다.\n파일 유형을 바꿔서 다시 시도해 주세요.";
   }
   if (message.includes("명단으로 보이는 데이터 행을 찾지 못했습니다")) {
-    return "표 안에서 실제 대상자 명단을 찾지 못했습니다. 다른 파일 유형을 선택하거나, 맨 아래 `일반 명단 파일 자동 인식` 유형으로 다시 시도해 주세요.";
+    return "표 안에서 실제 대상자 명단을 찾지 못했습니다.\n다른 파일 유형으로 바꾸거나 `7. 일반 명단 파일 자동 인식` 유형으로 다시 시도해 주세요.";
   }
   if (message.includes("지원하지 않는 엑셀 형식")) {
     return "지원하는 확장자는 .xlsx, .xlsm, .xltx, .xltm, .xls 입니다.";
@@ -374,9 +374,9 @@ function buildSuccessStatus(summary) {
     0
   );
   if (unresolvedCount > 0) {
-    return `<strong>변환은 완료되었습니다.</strong><br>과정코드가 연결되지 않은 항목이 ${unresolvedCount}건 있습니다. 요약을 확인한 뒤 결과 파일을 내려받아 주세요.`;
+    return `<strong>변환은 완료되었습니다.</strong><br>과정코드가 연결되지 않은 항목이 ${unresolvedCount}건 있습니다. 요약을 확인한 뒤 <strong>결과 파일 다운로드</strong>를 눌러 받아 주세요.`;
   }
-  return "<strong>변환이 완료되었습니다.</strong><br>결과 파일이 준비되었습니다. 아래 버튼으로 내려받아 주세요.";
+  return "<strong>변환이 완료되었습니다.</strong><br>결과 파일이 준비되었습니다. <strong>결과 파일 다운로드</strong>를 눌러 받아 주세요.";
 }
 
 async function convertFile() {
@@ -411,7 +411,7 @@ async function convertFile() {
     refreshUsageView();
   } catch (error) {
     const friendlyMessage = explainError(error);
-    statusBox.textContent = "변환에 실패했습니다. 아래 오류 안내를 확인해 주세요.";
+    statusBox.textContent = "변환에 실패했습니다. 오류 안내 내용을 확인해 주세요.";
     errorBox.value = friendlyMessage;
     saveErrorLog(profile, friendlyMessage);
     refreshUsageView();
