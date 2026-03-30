@@ -252,6 +252,10 @@
       margin-top: 12px;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     .guide-box {
       padding: 18px;
       border-radius: 18px;
@@ -549,7 +553,7 @@
     <section class="grid">
       <article class="card">
         <h2>파일 변환</h2>
-        <p>원본 파일을 올리면 가장 비슷한 유형을 추천합니다. 유형이 애매하면 `7. 일반 명단 파일 자동 인식`부터 시도해 보시면 됩니다.</p>
+        <p>원본 파일을 올리면 가장 비슷한 유형을 추천합니다. 유형이 애매하면 `8. 일반 명단 파일 자동 인식`부터 시도해 보시면 됩니다.</p>
 
         <div class="field">
           <label for="fileInput">1. 원본 파일 올리기</label>
@@ -560,6 +564,12 @@
           <label for="profileSelect">2. 파일 유형 확인</label>
           <select id="profileSelect"></select>
           <div class="note">파일명을 보고 가장 비슷한 유형을 추천합니다. 추천이 다르면 직접 바꿔 주세요.</div>
+        </div>
+
+        <div class="field" id="manualCourseField" hidden>
+          <label for="manualCourseInput" id="manualCourseLabel">선택 입력. 시트별 과정코드 직접 입력</label>
+          <textarea id="manualCourseInput" placeholder=""></textarea>
+          <div class="note" id="manualCourseNote">과정코드를 따로 받은 경우에만 입력해 주세요.</div>
         </div>
 
         <div class="note">최근 사용 내역은 현재 브라우저에서만 보이며, 개인정보 보호를 위해 사용자명과 파일명은 저장하지 않습니다.</div>

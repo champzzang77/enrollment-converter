@@ -19,6 +19,16 @@
 https://사용자명.github.io/저장소명/
 ```
 
+## 로컬 전용 사용
+
+인터넷 없이 내 PC에서만 실행하려면 아래 실행 파일을 사용하면 됩니다.
+
+```text
+/Users/parkchamin/vibe/start_local_enrollment_app.command
+```
+
+이 실행 파일은 로컬 서버를 켜고 브라우저에서 `http://127.0.0.1:8093` 주소를 자동으로 엽니다.
+
 ## 주의
 
 - 중앙 로그는 없습니다.

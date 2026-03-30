@@ -75,8 +75,85 @@ function normalizeLookup(lookup = {}) {
   );
 }
 
+function normalizeRuntimeSheetMap(sheetMap = {}) {
+  return Object.fromEntries(
+    Object.entries(sheetMap).map(([key, value]) => [String(key), text(value)])
+  );
+}
+
+function normalizeColumnRefs(columnRef) {
+  if (Array.isArray(columnRef)) {
+    return columnRef.map((item) => columnRefToIndex(item));
+  }
+  return [columnRefToIndex(columnRef)];
+}
+
+function getPrimaryColumnIndex(columnIndexes) {
+  if (Array.isArray(columnIndexes)) {
+    return columnIndexes[0];
+  }
+  return columnIndexes;
+}
+
 function hasRequiredValue(rowData, requiredFields) {
   return requiredFields.some((field) => text(rowData[field]));
+}
+
+function valueMatchesRule(fieldValue, matcher) {
+  const normalizedValue = text(fieldValue);
+  if (matcher && typeof matcher === "object" && !Array.isArray(matcher)) {
+    if (matcher.equals !== undefined && normalizedValue !== text(matcher.equals)) {
+      return false;
+    }
+    if (matcher.includes !== undefined) {
+      const expected = String(text(matcher.includes) || "").toLowerCase();
+      const actual = String(normalizedValue || "").toLowerCase();
+      if (!actual.includes(expected)) {
+        return false;
+      }
+    }
+    if (Array.isArray(matcher.any_of) && matcher.any_of.length) {
+      const matched = matcher.any_of.some((item) => normalizedValue === text(item));
+      if (!matched) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return normalizedValue === text(matcher);
+}
+
+function shouldSkipExtractedRow(rowData, sourceConfig = {}) {
+  const skipRules = Array.isArray(sourceConfig.skip_rows_if) ? sourceConfig.skip_rows_if : [];
+  return skipRules.some((rule) =>
+    Object.entries(rule).every(([field, matcher]) => valueMatchesRule(rowData[field], matcher))
+  );
+}
+
+function sheetHasFixedColumnData(rawRows, startRowIndex, columnMap, requiredFields, sourceConfig = {}) {
+  for (let rowIndex = startRowIndex; rowIndex < rawRows.length; rowIndex += 1) {
+    const rawRow = rawRows[rowIndex] || [];
+    const extracted = Object.fromEntries(
+      Object.entries(columnMap).map(([field, columnIndexes]) => [
+        field,
+        columnIndexes
+          .map((columnIndex) => text(columnIndex < rawRow.length ? rawRow[columnIndex] : null))
+          .find((value) => value) || null,
+      ])
+    );
+
+    if (!hasRequiredValue(extracted, requiredFields)) {
+      continue;
+    }
+
+    if (shouldSkipExtractedRow(extracted, sourceConfig)) {
+      continue;
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 function applyDefaults(rowData, defaults = {}) {
@@ -187,6 +264,47 @@ function resolveCourseExpansions(sheetName, sourceConfig, courseLookup) {
   return { expansions, unresolvedNames };
 }
 
+function resolveSeedCourseExpansions(rawRows, sourceConfig, columnMap) {
+  const seedConfig = sourceConfig.seed_courses_from_top_rows;
+  if (!seedConfig) {
+    return [];
+  }
+
+  const codeField = seedConfig.code_field || "course_code";
+  const nameField = seedConfig.name_field || "course_name";
+  const codeIndex = getPrimaryColumnIndex(columnMap[codeField]);
+  const nameIndex = getPrimaryColumnIndex(columnMap[nameField]);
+
+  if (codeIndex === undefined && nameIndex === undefined) {
+    return [];
+  }
+
+  const startRow = Number(seedConfig.start_row || sourceConfig.start_row || 2);
+  const maxRows = Number(seedConfig.max_rows || 20);
+  const expansions = [];
+
+  for (
+    let rowIndex = startRow - 1;
+    rowIndex < rawRows.length && rowIndex < startRow - 1 + maxRows;
+    rowIndex += 1
+  ) {
+    const rawRow = rawRows[rowIndex] || [];
+    const code = codeIndex === undefined ? null : text(codeIndex < rawRow.length ? rawRow[codeIndex] : null);
+    const name = nameIndex === undefined ? null : text(nameIndex < rawRow.length ? rawRow[nameIndex] : null);
+
+    if (code || name) {
+      expansions.push({ code, name });
+      continue;
+    }
+
+    if (expansions.length) {
+      break;
+    }
+  }
+
+  return expansions;
+}
+
 function findHeaderRowByKeywords(rows, requiredKeywords) {
   const normalizedKeywords = requiredKeywords.map((keyword) => normalizeHeader(keyword));
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
@@ -271,16 +389,26 @@ function validateFixedColumnLayout(rows, sourceConfig, sheetName) {
   const mismatchMessages = [];
 
   validation.column_checks.forEach((check) => {
-    const columnIndex = columnRefToIndex(check.column);
-    const rawHeader = text(columnIndex < headerRow.length ? headerRow[columnIndex] : null) || "";
-    const normalizedHeader = normalizeHeader(rawHeader);
+    const candidateColumns = Array.isArray(check.columns) && check.columns.length
+      ? check.columns
+      : [check.column];
     const includes = normalizeKeywordList(check.includes || []);
     const anyOf = normalizeKeywordList(check.any_of || []);
+    const matchedColumn = candidateColumns.find((columnRef) => {
+      const columnIndex = columnRefToIndex(columnRef);
+      const rawHeader = text(columnIndex < headerRow.length ? headerRow[columnIndex] : null) || "";
+      const normalizedHeader = normalizeHeader(rawHeader);
+      const includesMatched = includes.every((keyword) => normalizedHeader.includes(keyword));
+      const anyOfMatched = !anyOf.length || anyOf.some((keyword) => normalizedHeader.includes(keyword));
+      return includesMatched && anyOfMatched;
+    });
 
-    const includesMatched = includes.every((keyword) => normalizedHeader.includes(keyword));
-    const anyOfMatched = !anyOf.length || anyOf.some((keyword) => normalizedHeader.includes(keyword));
-
-    if (!includesMatched || !anyOfMatched) {
+    if (!matchedColumn) {
+      const rawHeaders = candidateColumns.map((columnRef) => {
+        const columnIndex = columnRefToIndex(columnRef);
+        const rawHeader = text(columnIndex < headerRow.length ? headerRow[columnIndex] : null) || "빈칸";
+        return `${columnRef}:${rawHeader}`;
+      });
       const expectedParts = [];
       if (includes.length) {
         expectedParts.push(`포함: ${check.includes.join(", ")}`);
@@ -289,7 +417,7 @@ function validateFixedColumnLayout(rows, sourceConfig, sheetName) {
         expectedParts.push(`다음 중 하나: ${check.any_of.join(", ")}`);
       }
       mismatchMessages.push(
-        `${check.column}열 기대값(${expectedParts.join(" / ")}) != 실제값(${rawHeader || "빈칸"})`
+        `${candidateColumns.join("/")}열 기대값(${expectedParts.join(" / ")}) != 실제값(${rawHeaders.join(", ")})`
       );
     }
   });
@@ -302,7 +430,7 @@ function validateFixedColumnLayout(rows, sourceConfig, sheetName) {
   }
 }
 
-function buildRowsFixedColumns(profile, workbookData, courseLookup) {
+function buildRowsFixedColumns(profile, workbookData, courseLookup, runtimeOptions = {}) {
   const sourceConfig = profile.source;
   const headers = profile.guide_headers || GUIDE_HEADERS;
   if (headers.length !== GUIDE_HEADERS.length) {
@@ -312,7 +440,7 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
   const sheetMap = new Map(workbookData.map((sheet) => [sheet.name, sheet.rows]));
   const sheetNames = workbookData.map((sheet) => sheet.name);
   const columnMap = Object.fromEntries(
-    Object.entries(sourceConfig.column_map).map(([field, columnRef]) => [field, columnRefToIndex(columnRef)])
+    Object.entries(sourceConfig.column_map).map(([field, columnRef]) => [field, normalizeColumnRefs(columnRef)])
   );
   const requiredAny = sourceConfig.required_any || ["user_id", "name"];
   const defaults = normalizeDefaults(profile.defaults || {});
@@ -328,17 +456,62 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
   const startRow = Number(sourceConfig.start_row || 2);
   const copyIfMissing = profile.copy_if_missing || {};
   const undefinedIfMissing = profile.undefined_if_missing || [];
+  const manualSheetCourseCodes = normalizeRuntimeSheetMap(runtimeOptions.manual_sheet_course_codes || {});
 
   const rows = [];
   const sheetStats = [];
+  const missingManualCourseSheets = [];
 
   for (const sheetName of selectedSheets) {
     const rawRows = sheetMap.get(sheetName) || [];
-    validateFixedColumnLayout(rawRows, sourceConfig, sheetName);
+    try {
+      validateFixedColumnLayout(rawRows, sourceConfig, sheetName);
+    } catch (error) {
+      if (sourceConfig.ignore_invalid_layout) {
+        sheetStats.push({
+          sheet_name: sheetName,
+          skipped_reason: "layout_mismatch",
+          row_count: 0,
+        });
+        continue;
+      }
+      throw error;
+    }
     const { expansions, unresolvedNames } = resolveCourseExpansions(sheetName, sourceConfig, courseLookup);
+    const seedExpansions = resolveSeedCourseExpansions(rawRows, sourceConfig, columnMap);
+    const effectiveExpansions = seedExpansions.length ? seedExpansions : expansions;
+    const hasDataRows = sheetHasFixedColumnData(
+      rawRows,
+      startRow - 1,
+      columnMap,
+      requiredAny,
+      sourceConfig
+    );
+    if (!hasDataRows) {
+      sheetStats.push({
+        sheet_name: sheetName,
+        course_names: effectiveExpansions.map((item) => item.name).filter(Boolean),
+        course_codes: effectiveExpansions.map((item) => item.code).filter(Boolean),
+        unresolved_course_names: unresolvedNames,
+        source_person_count: 0,
+        row_count: 0,
+        email_undefined: 0,
+        mobile_undefined: 0,
+      });
+      continue;
+    }
+    if (sourceConfig.require_manual_course_codes && !manualSheetCourseCodes[sheetName]) {
+      missingManualCourseSheets.push(sheetName);
+      continue;
+    }
     const perSheetDefaults = {
       ...defaults,
       ...normalizeDefaults(sheetDefaults[sheetName] || {}),
+      ...normalizeDefaults(
+        manualSheetCourseCodes[sheetName]
+          ? { course_code: manualSheetCourseCodes[sheetName] }
+          : {}
+      ),
     };
 
     let sourcePersonCount = 0;
@@ -349,9 +522,11 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
     for (let rowIndex = startRow - 1; rowIndex < rawRows.length; rowIndex += 1) {
       const rawRow = rawRows[rowIndex] || [];
       const extracted = Object.fromEntries(
-        Object.entries(columnMap).map(([field, columnIndex]) => [
+        Object.entries(columnMap).map(([field, columnIndexes]) => [
           field,
-          text(columnIndex < rawRow.length ? rawRow[columnIndex] : null),
+          columnIndexes
+            .map((columnIndex) => text(columnIndex < rawRow.length ? rawRow[columnIndex] : null))
+            .find((value) => value) || null,
         ])
       );
 
@@ -359,8 +534,12 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
         continue;
       }
 
+      if (shouldSkipExtractedRow(extracted, sourceConfig)) {
+        continue;
+      }
+
       sourcePersonCount += 1;
-      const expandedCourses = expansions.length ? expansions : [{ name: null, code: null }];
+      const expandedCourses = effectiveExpansions.length ? effectiveExpansions : [{ name: null, code: null }];
       for (const expansion of expandedCourses) {
         let rowData = { ...extracted };
         rowData.course_code = text(expansion.code) || rowData.course_code || null;
@@ -379,8 +558,8 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
 
     sheetStats.push({
       sheet_name: sheetName,
-      course_names: expansions.map((item) => item.name).filter(Boolean),
-      course_codes: expansions.map((item) => item.code).filter(Boolean),
+      course_names: effectiveExpansions.map((item) => item.name).filter(Boolean),
+      course_codes: effectiveExpansions.map((item) => item.code).filter(Boolean),
       unresolved_course_names: unresolvedNames,
       source_person_count: sourcePersonCount,
       row_count: rowCount,
@@ -389,10 +568,16 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup) {
     });
   }
 
+  if (missingManualCourseSheets.length) {
+    throw new Error(
+      `선택한 파일 유형은 시트별 과정코드를 직접 입력해야 합니다.\n누락된 시트: ${missingManualCourseSheets.join(", ")}`
+    );
+  }
+
   return { rows, sheetStats };
 }
 
-function buildRowsHeaderAlias(profile, workbookData) {
+function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
   const sourceConfig = profile.source;
   const headers = profile.guide_headers || GUIDE_HEADERS;
   if (headers.length !== GUIDE_HEADERS.length) {
@@ -410,12 +595,14 @@ function buildRowsHeaderAlias(profile, workbookData) {
   const headerKeywords = sourceConfig.header_keywords || [];
   const sheetContextLabels = sourceConfig.sheet_context_labels || {};
   const selectedSheets = chooseSheetNames(sheetNames, sourceConfig);
+  const manualSheetCourseCodes = normalizeRuntimeSheetMap(runtimeOptions.manual_sheet_course_codes || {});
   if (!selectedSheets.length) {
     throw new Error("선택한 파일 유형과 업로드한 파일 구조가 다릅니다. 필요한 시트를 찾지 못했습니다.");
   }
 
   const rows = [];
   const sheetStats = [];
+  const missingManualCourseSheets = [];
 
   for (const sheetName of selectedSheets) {
     const rawRows = sheetMap.get(sheetName) || [];
@@ -434,6 +621,11 @@ function buildRowsHeaderAlias(profile, workbookData) {
       throw error;
     }
 
+    if (sourceConfig.require_manual_course_codes && !manualSheetCourseCodes[sheetName]) {
+      missingManualCourseSheets.push(sheetName);
+      continue;
+    }
+
     const { rowIndex: headerRowIndex, headerRow } = headerInfo;
     const indexMap = getHeaderIndexMap(headerRow);
     const preHeaderRows = rawRows.slice(0, headerRowIndex);
@@ -446,6 +638,11 @@ function buildRowsHeaderAlias(profile, workbookData) {
     const perSheetDefaults = {
       ...defaults,
       ...normalizeDefaults(sheetDefaults[sheetName] || {}),
+      ...normalizeDefaults(
+        manualSheetCourseCodes[sheetName]
+          ? { course_code: manualSheetCourseCodes[sheetName] }
+          : {}
+      ),
     };
 
     let sourcePersonCount = 0;
@@ -483,11 +680,18 @@ function buildRowsHeaderAlias(profile, workbookData) {
     sheetStats.push({
       sheet_name: sheetName,
       header_row: headerRowIndex + 1,
+      course_codes: manualSheetCourseCodes[sheetName] ? [manualSheetCourseCodes[sheetName]] : [],
       source_person_count: sourcePersonCount,
       row_count: rowCount,
       email_undefined: emailUndefined,
       mobile_undefined: mobileUndefined,
     });
+  }
+
+  if (missingManualCourseSheets.length) {
+    throw new Error(
+      `선택한 파일 유형은 시트별 과정코드를 직접 입력해야 합니다.\n누락된 시트: ${missingManualCourseSheets.join(", ")}`
+    );
   }
 
   return { rows, sheetStats };
@@ -512,7 +716,7 @@ export function buildSummary(profile, inputFileName, outputFileName, rows, sheet
   };
 }
 
-export function runProfile(profile, workbookData, inputFileName) {
+export function runProfile(profile, workbookData, inputFileName, runtimeOptions = {}) {
   const sourceMode = profile?.source?.mode;
   if (!profile || !sourceMode) {
     throw new Error("파일 유형을 먼저 선택해 주세요.");
@@ -521,9 +725,9 @@ export function runProfile(profile, workbookData, inputFileName) {
   const courseLookup = normalizeLookup(profile.course_lookup || {});
   let result;
   if (sourceMode === "fixed_columns") {
-    result = buildRowsFixedColumns(profile, workbookData, courseLookup);
+    result = buildRowsFixedColumns(profile, workbookData, courseLookup, runtimeOptions);
   } else if (sourceMode === "header_alias") {
-    result = buildRowsHeaderAlias(profile, workbookData);
+    result = buildRowsHeaderAlias(profile, workbookData, runtimeOptions);
   } else {
     throw new Error(`아직 지원하지 않는 source.mode 입니다: ${sourceMode}`);
   }
