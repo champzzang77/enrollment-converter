@@ -156,6 +156,89 @@ function checkCompletedApplicationSheet(rows) {
   );
 }
 
+function checkGroupedSingleSheetApplication(rows) {
+  const headerChecks = [
+    { row: 17, col: 2, includes: "과정코드" },
+    { row: 17, col: 3, includes: "과정명" },
+    { row: 17, col: 4, includes: "이름" },
+    { row: 17, col: 5, includes: "희망id" },
+  ];
+
+  const headerMatched = headerChecks.every((check) =>
+    normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
+  );
+
+  if (!headerMatched) {
+    return false;
+  }
+
+  let courseRows = 0;
+  let anchorRows = 0;
+  for (let rowIndex = 18; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] || [];
+    const courseCode = String(row[2] || "").trim();
+    const name = String(row[4] || "").trim();
+    const userId = String(row[5] || "").trim();
+    if (courseCode) {
+      courseRows += 1;
+    }
+    if (name || userId) {
+      anchorRows += 1;
+    }
+  }
+
+  return courseRows >= 5 && anchorRows >= 2 && anchorRows < courseRows;
+}
+
+function checkCmcTrainingTeamBundle(workbookData) {
+  const targetSheets = ["재직직원", "신규직원"];
+  const matchedSheets = workbookData.filter((sheet) => targetSheets.includes(sheet.name));
+  if (!matchedSheets.length) {
+    return false;
+  }
+
+  return matchedSheets.some((sheet) => {
+    const rows = sheet.rows || [];
+    const checks = [
+      { row: 17, col: 2, includes: "과정코드" },
+      { row: 17, col: 3, includes: "과정명" },
+      { row: 17, col: 4, includes: "이름" },
+      { row: 17, col: 5, includes: "희망id" },
+      { row: 17, col: 10, includes: "이메일" },
+      { row: 17, col: 11, includes: "휴대폰" },
+      { row: 17, col: 13, includes: "부서" },
+    ];
+
+    const headerMatched = checks.every((check) =>
+      normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
+    );
+
+    if (!headerMatched) {
+      return false;
+    }
+
+    let seedCourseCount = 0;
+    let blankAfterSeed = 0;
+    for (let rowIndex = 18; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex] || [];
+      const courseCode = String(row[2] || "").trim();
+      const name = String(row[4] || "").trim();
+      const userId = String(row[5] || row[6] || "").trim();
+
+      if (courseCode) {
+        seedCourseCount += 1;
+        continue;
+      }
+
+      if ((name || userId) && seedCourseCount > 0) {
+        blankAfterSeed += 1;
+      }
+    }
+
+    return seedCourseCount >= 5 && blankAfterSeed >= 5;
+  });
+}
+
 function checkManualCourseSheet(rows) {
   const checks = [
     { row: 1, col: 2, includes: "이름" },
@@ -163,6 +246,20 @@ function checkManualCourseSheet(rows) {
     { row: 1, col: 5, includes: "이메일" },
     { row: 1, col: 6, includes: "휴대폰" },
     { row: 1, col: 8, includes: "부서" },
+  ];
+
+  return checks.every((check) =>
+    normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
+  );
+}
+
+function checkSingleSheetManualCourseSheet(rows) {
+  const checks = [
+    { row: 17, col: 3, includes: "과정명" },
+    { row: 17, col: 6, includes: "이름" },
+    { row: 17, col: 7, includes: "전화번호" },
+    { row: 17, col: 8, includes: "사번" },
+    { row: 17, col: 9, includes: "부서" },
   ];
 
   return checks.every((check) =>
@@ -186,6 +283,20 @@ function checkManualFixedCourseSheet(rows) {
   );
 }
 
+function hasManualFixedCourseData(rows) {
+  for (let rowIndex = 18; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] || [];
+    const courseName = String(row[2] || "").trim();
+    const userId = String(row[3] || "").trim();
+    const name = String(row[5] || "").trim();
+    const mobile = String(row[8] || "").trim();
+    if (courseName || userId || name || mobile) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function checkInternationalStMaryBundle(workbookData) {
   const sheetNames = new Set((workbookData || []).map((sheet) => sheet.name));
   return (
@@ -200,6 +311,9 @@ function recommendProfileByWorkbookStructure(workbookData) {
   const manualProfile = PROFILES.find((profile) => profile.id === "manual_sheet_course_header");
   const manualFixedProfile = PROFILES.find((profile) => profile.id === "manual_fixed_sheet_course_codes");
   const internationalStMaryProfile = PROFILES.find((profile) => profile.id === "international_stmary_group_enrollment");
+  const singleSheetManualProfile = PROFILES.find((profile) => profile.id === "single_sheet_manual_course_header");
+  const groupedSingleSheetProfile = PROFILES.find((profile) => profile.id === "grouped_single_sheet_application");
+  const cmcTrainingTeamProfile = PROFILES.find((profile) => profile.id === "cmc_training_team_seed_bundle");
 
   if (!Array.isArray(workbookData) || workbookData.length === 0) {
     return null;
@@ -210,6 +324,36 @@ function recommendProfileByWorkbookStructure(workbookData) {
       profile: internationalStMaryProfile,
       reason: "structure",
       message: `<strong>${internationalStMaryProfile.label}</strong> 형식으로 추천했습니다.<br>국제성모병원 단체입과명단 구조가 확인되어 과정코드까지 자동 연결하도록 맞췄습니다.`,
+    };
+  }
+
+  if (cmcTrainingTeamProfile && checkCmcTrainingTeamBundle(workbookData)) {
+    return {
+      profile: cmcTrainingTeamProfile,
+      reason: "structure",
+      message: `<strong>${cmcTrainingTeamProfile.label}</strong> 형식으로 추천했습니다.<br>재직직원/신규직원 시트 상단의 과정코드 묶음을 모든 대상자에게 자동 확장하도록 맞췄습니다.`,
+    };
+  }
+
+  const groupedSingleSheetMatches = workbookData.filter((sheet) =>
+    checkGroupedSingleSheetApplication(sheet.rows || [])
+  );
+  if (groupedSingleSheetProfile && groupedSingleSheetMatches.length >= 1) {
+    return {
+      profile: groupedSingleSheetProfile,
+      reason: "structure",
+      message: `<strong>${groupedSingleSheetProfile.label}</strong> 형식으로 추천했습니다.<br>한 사람 아래에 여러 과정이 묶인 입과 신청서 구조가 확인되어, 이름과 ID를 아래 과정들에 자동으로 이어 붙이도록 맞췄습니다.`,
+    };
+  }
+
+  const singleSheetManualMatches = workbookData.filter((sheet) =>
+    checkSingleSheetManualCourseSheet(sheet.rows || [])
+  );
+  if (singleSheetManualProfile && singleSheetManualMatches.length >= 1) {
+    return {
+      profile: singleSheetManualProfile,
+      reason: "structure",
+      message: `<strong>${singleSheetManualProfile.label}</strong> 형식으로 추천했습니다.<br>한 장짜리 추가 명단표 구조가 확인되었습니다. 아래 입력칸에 과정코드만 한 번 넣어 주세요.`,
     };
   }
 
@@ -325,7 +469,11 @@ function normalizeSheetNameKey(value) {
   return normalizeFileNameMatch(value).replace(/[()_\-]/g, "");
 }
 
-function parseManualCourseAssignments(rawText, workbookData) {
+function hasFilledValue(value) {
+  return String(value ?? "").trim() !== "";
+}
+
+function parseManualCourseAssignments(rawText, knownSheetNames = []) {
   const textValue = String(rawText || "").trim();
   const sheetCourseCodes = {};
   const orderedEntries = [];
@@ -335,7 +483,7 @@ function parseManualCourseAssignments(rawText, workbookData) {
   }
 
   const sheetsByNormalizedName = new Map(
-    workbookData.map((sheet) => [normalizeSheetNameKey(sheet.name), sheet.name])
+    knownSheetNames.map((sheetName) => [normalizeSheetNameKey(sheetName), sheetName])
   );
 
   const lines = textValue
@@ -372,9 +520,9 @@ function parseManualCourseAssignments(rawText, workbookData) {
     }
 
     const bareCodeMatch = normalizedLine.match(/^(HL[A-Za-z0-9]+)$/i);
-    if (bareCodeMatch && pendingName) {
+    if (bareCodeMatch) {
       orderedEntries.push({
-        name: pendingName,
+        name: pendingName || null,
         code: bareCodeMatch[1].toUpperCase(),
       });
       pendingName = "";
@@ -384,18 +532,170 @@ function parseManualCourseAssignments(rawText, workbookData) {
     pendingName = normalizedLine;
   });
 
-  const remainingSheetNames = workbookData
-    .map((sheet) => sheet.name)
-    .filter((sheetName) => !sheetCourseCodes[sheetName]);
+  return { sheetCourseCodes, orderedEntries };
+}
 
-  orderedEntries.forEach((entry, index) => {
-    const sheetName = remainingSheetNames[index];
-    if (sheetName) {
-      sheetCourseCodes[sheetName] = entry.code;
+function normalizeManualInputSheetSelection(sheetNames, sourceConfig = {}) {
+  const skipSet = new Set(sourceConfig.skip_sheets || []);
+  const selected = (sourceConfig.include_sheets || []).length
+    ? sheetNames.filter((name) => sourceConfig.include_sheets.includes(name))
+    : [...sheetNames];
+  return selected.filter((name) => !skipSet.has(name));
+}
+
+function chooseProfileSheetNames(sheetNames, sourceConfig = {}) {
+  const preferredSheets = sourceConfig.preferred_sheets || [];
+  if (preferredSheets.length) {
+    const matched = preferredSheets.filter((name) => sheetNames.includes(name));
+    if (matched.length) {
+      return matched;
+    }
+    if (sourceConfig.fallback_first_sheet && sheetNames.length) {
+      return [sheetNames[0]];
+    }
+  }
+
+  const selected = normalizeManualInputSheetSelection(sheetNames, sourceConfig);
+  return sourceConfig.first_sheet_only ? selected.slice(0, 1) : selected;
+}
+
+function findManualInputHeaderRowByKeywords(rows, requiredKeywords) {
+  const normalizedKeywords = requiredKeywords.map((keyword) => normalizeHeaderText(keyword));
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] || [];
+    const joined = row.map((cell) => normalizeHeaderText(cell)).join("|");
+    if (normalizedKeywords.every((keyword) => joined.includes(keyword))) {
+      return { rowIndex, headerRow: row };
+    }
+  }
+
+  throw new Error(`헤더 행을 찾지 못했습니다: ${requiredKeywords.join(", ")}`);
+}
+
+function findManualInputHeaderRowWithConfig(rows, sourceConfig = {}) {
+  const keywordGroups = Array.isArray(sourceConfig.header_keyword_groups) && sourceConfig.header_keyword_groups.length
+    ? sourceConfig.header_keyword_groups
+    : [sourceConfig.header_keywords || []];
+
+  let lastError = null;
+  for (const keywords of keywordGroups) {
+    try {
+      return findManualInputHeaderRowByKeywords(rows, keywords);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("헤더 행을 찾지 못했습니다.");
+}
+
+function getManualInputHeaderIndexMap(headerRow) {
+  const entries = [];
+  headerRow.forEach((cell, index) => {
+    const key = normalizeHeaderText(cell);
+    if (key) {
+      entries.push([key, index]);
     }
   });
+  return Object.fromEntries(entries);
+}
 
-  return { sheetCourseCodes, orderedEntries };
+function pickManualInputValueByAliases(row, indexMap, aliases = []) {
+  for (const alias of aliases) {
+    const aliasKey = normalizeHeaderText(alias);
+    for (const [headerKey, index] of Object.entries(indexMap)) {
+      if (headerKey.includes(aliasKey) && index < row.length) {
+        const value = row[index];
+        if (hasFilledValue(value)) {
+          return value;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function buildManualInputHeaderAliasRowData(rawRow, indexMap, fieldAliases = {}) {
+  return Object.fromEntries(
+    Object.entries(fieldAliases).map(([field, aliases]) => [
+      field,
+      pickManualInputValueByAliases(rawRow || [], indexMap, aliases),
+    ])
+  );
+}
+
+function hasRequiredHeaderAliasData(rows, sourceConfig = {}) {
+  const headerInfo = findManualInputHeaderRowWithConfig(rows, sourceConfig);
+  const indexMap = getManualInputHeaderIndexMap(headerInfo.headerRow);
+  const requiredAny = sourceConfig.required_any || ["user_id", "name", "email", "mobile"];
+  const fieldAliases = sourceConfig.field_aliases || {};
+
+  return rows.slice(headerInfo.rowIndex + 1).some((rawRow) => {
+    const extracted = buildManualInputHeaderAliasRowData(rawRow || [], indexMap, fieldAliases);
+    return requiredAny.some((field) => hasFilledValue(extracted[field]));
+  });
+}
+
+function getManualCourseCandidateSheets(profile, workbookData) {
+  if (!profile?.manual_course_input?.required || !Array.isArray(workbookData)) {
+    return [];
+  }
+
+  const sourceConfig = profile.source || {};
+  const selectedSheetNames = chooseProfileSheetNames(
+    workbookData.map((sheet) => sheet.name),
+    sourceConfig
+  );
+
+  if (profile.id === "manual_fixed_sheet_course_codes") {
+    return workbookData
+      .filter((sheet) => selectedSheetNames.includes(sheet.name))
+      .filter((sheet) => checkManualFixedCourseSheet(sheet.rows || []))
+      .filter((sheet) => hasManualFixedCourseData(sheet.rows || []))
+      .map((sheet) => sheet.name);
+  }
+
+  if (sourceConfig.mode === "header_alias") {
+    return workbookData
+      .filter((sheet) => selectedSheetNames.includes(sheet.name))
+      .filter((sheet) => {
+        try {
+          return hasRequiredHeaderAliasData(sheet.rows || [], sourceConfig);
+        } catch (_error) {
+          return false;
+        }
+      })
+      .map((sheet) => sheet.name);
+  }
+
+  return selectedSheetNames;
+}
+
+function resolveManualCourseAssignmentsForProfile(profile, workbookData, rawText) {
+  const allSheetNames = Array.isArray(workbookData) ? workbookData.map((sheet) => sheet.name) : [];
+  const parsedAssignments = parseManualCourseAssignments(rawText, allSheetNames);
+  const candidateSheetNames = getManualCourseCandidateSheets(profile, workbookData);
+  const runtimeSheetCourseCodes = { ...parsedAssignments.sheetCourseCodes };
+  const orderedTargetSheetNames = (candidateSheetNames.length ? candidateSheetNames : allSheetNames)
+    .filter((sheetName) => !runtimeSheetCourseCodes[sheetName]);
+
+  if (parsedAssignments.orderedEntries.length === 1 && orderedTargetSheetNames.length === 1) {
+    runtimeSheetCourseCodes[orderedTargetSheetNames[0]] = parsedAssignments.orderedEntries[0].code;
+  } else if (parsedAssignments.orderedEntries.length > 1) {
+    parsedAssignments.orderedEntries.forEach((entry, index) => {
+      const sheetName = orderedTargetSheetNames[index];
+      if (sheetName) {
+        runtimeSheetCourseCodes[sheetName] = entry.code;
+      }
+    });
+  }
+
+  return {
+    sheetCourseCodes: runtimeSheetCourseCodes,
+    orderedEntries: parsedAssignments.orderedEntries,
+    candidateSheetNames,
+  };
 }
 
 function pad(value) {
@@ -657,7 +957,12 @@ async function convertFile() {
 
   try {
     const workbookData = await extractWorkbookData(file);
-    const manualCourseAssignments = parseManualCourseAssignments(manualCourseInput.value, workbookData);
+    const manualCourseAssignments = resolveManualCourseAssignmentsForProfile(
+      profile,
+      workbookData,
+      manualCourseInput.value
+    );
+
     const result = runProfile(profile, workbookData, file.name, {
       manual_sheet_course_codes: manualCourseAssignments.sheetCourseCodes,
     });

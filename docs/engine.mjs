@@ -1,4 +1,4 @@
-import { GUIDE_HEADERS, OUTPUT_FIELDS } from "./data.mjs";
+import { AFFILIATE_CODE_LOOKUP, GUIDE_HEADERS, OUTPUT_FIELDS } from "./data.mjs";
 
 export function text(value) {
   if (value === null || value === undefined) {
@@ -75,6 +75,8 @@ function normalizeLookup(lookup = {}) {
   );
 }
 
+const AFFILIATE_LOOKUP = normalizeLookup(AFFILIATE_CODE_LOOKUP);
+
 function normalizeRuntimeSheetMap(sheetMap = {}) {
   return Object.fromEntries(
     Object.entries(sheetMap).map(([key, value]) => [String(key), text(value)])
@@ -86,6 +88,24 @@ function normalizeColumnRefs(columnRef) {
     return columnRef.map((item) => columnRefToIndex(item));
   }
   return [columnRefToIndex(columnRef)];
+}
+
+function getCellValueByRef(rows, cellRef) {
+  if (!cellRef) {
+    return null;
+  }
+  const match = String(cellRef).trim().toUpperCase().match(/^([A-Z]+)(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const columnIndex = columnRefToIndex(match[1]);
+  const rowIndex = Number(match[2]) - 1;
+  if (rowIndex < 0 || rowIndex >= rows.length) {
+    return null;
+  }
+  const row = rows[rowIndex] || [];
+  return text(columnIndex < row.length ? row[columnIndex] : null);
 }
 
 function getPrimaryColumnIndex(columnIndexes) {
@@ -156,6 +176,94 @@ function sheetHasFixedColumnData(rawRows, startRowIndex, columnMap, requiredFiel
   return false;
 }
 
+function applyCarryForwardContext(rowData, carryForwardContext, sourceConfig = {}) {
+  const fields = Array.isArray(sourceConfig.carry_forward_fields)
+    ? sourceConfig.carry_forward_fields
+    : [];
+
+  if (!fields.length) {
+    return {
+      rowData,
+      carryForwardContext,
+    };
+  }
+
+  const anchorFields = Array.isArray(sourceConfig.carry_forward_anchor_fields) &&
+    sourceConfig.carry_forward_anchor_fields.length
+    ? sourceConfig.carry_forward_anchor_fields
+    : fields;
+
+  const isAnchorRow = anchorFields.some((field) => text(rowData[field]));
+  const nextContext = { ...carryForwardContext };
+  const nextRowData = { ...rowData };
+
+  if (isAnchorRow) {
+    fields.forEach((field) => {
+      nextContext[field] = text(rowData[field]) || null;
+    });
+    return {
+      rowData: nextRowData,
+      carryForwardContext: nextContext,
+    };
+  }
+
+  fields.forEach((field) => {
+    if (!text(nextRowData[field]) && text(nextContext[field])) {
+      nextRowData[field] = nextContext[field];
+    }
+  });
+
+  return {
+    rowData: nextRowData,
+    carryForwardContext: nextContext,
+  };
+}
+
+function resolveFixedFieldPrefixContext(rawRows, sourceConfig = {}) {
+  const prefixRules = sourceConfig.prefix_fields || {};
+  const resolved = {};
+
+  Object.entries(prefixRules).forEach(([field, config]) => {
+    const prefix = getCellValueByRef(rawRows, config?.from_cell);
+    if (prefix) {
+      resolved[field] = {
+        prefix,
+        when_regex: text(config?.when_regex),
+      };
+    }
+  });
+
+  return resolved;
+}
+
+function applyFieldPrefixes(rowData, prefixContext = {}) {
+  const merged = { ...rowData };
+
+  Object.entries(prefixContext).forEach(([field, config]) => {
+    const value = text(merged[field]);
+    const prefix = text(config?.prefix);
+    if (!value || !prefix) {
+      return;
+    }
+
+    if (value.startsWith(prefix)) {
+      return;
+    }
+
+    const pattern = text(config?.when_regex);
+    if (pattern) {
+      const regex = new RegExp(pattern);
+      if (!regex.test(value)) {
+        return;
+      }
+    }
+
+    merged[field] = `${prefix}${value}`;
+  });
+
+  return merged;
+}
+
 function applyDefaults(rowData, defaults = {}) {
   const merged = { ...rowData };
   for (const [key, value] of Object.entries(defaults)) {
@@ -166,8 +274,62 @@ function applyDefaults(rowData, defaults = {}) {
   return merged;
 }
 
+function applyAffiliateCode(rowData) {
+  const merged = { ...rowData };
+  if (text(merged.affiliate_code)) {
+    return merged;
+  }
+
+  const companyKey = normalizeMatchKey(merged.company);
+  if (!companyKey) {
+    return merged;
+  }
+
+  const affiliateCode = AFFILIATE_LOOKUP[companyKey];
+  if (affiliateCode) {
+    merged.affiliate_code = affiliateCode;
+  }
+  return merged;
+}
+
+function formatKoreanPhoneNumber(value) {
+  const raw = text(value);
+  if (!raw || raw === "undefined") {
+    return raw;
+  }
+
+  if (String(raw).includes("-")) {
+    return raw;
+  }
+
+  const digits = String(raw).replace(/\D/g, "");
+  if (!digits) {
+    return raw;
+  }
+
+  if (digits.startsWith("02")) {
+    if (digits.length === 9) {
+      return `02-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    }
+    if (digits.length === 10) {
+      return `02-${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    return raw;
+  }
+
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  if (digits.length === 11) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+
+  return raw;
+}
+
 function finalizeRow(rowData, copyIfMissing = {}, undefinedIfMissing = []) {
-  const finalized = { method: "0", ...rowData };
+  const finalized = applyAffiliateCode({ method: "0", ...rowData });
 
   for (const [destination, source] of Object.entries(copyIfMissing)) {
     if (!text(finalized[destination]) && text(finalized[source])) {
@@ -184,6 +346,12 @@ function finalizeRow(rowData, copyIfMissing = {}, undefinedIfMissing = []) {
   for (const field of ["sms", "mail"]) {
     if (text(finalized[field])) {
       finalized[field] = String(finalized[field]).toUpperCase();
+    }
+  }
+
+  for (const field of ["phone", "mobile"]) {
+    if (text(finalized[field])) {
+      finalized[field] = formatKoreanPhoneNumber(finalized[field]);
     }
   }
 
@@ -357,6 +525,15 @@ function pickByAliases(row, indexMap, aliases) {
   return null;
 }
 
+function buildHeaderAliasRowData(rawRow, indexMap, fieldAliases = {}) {
+  return Object.fromEntries(
+    Object.entries(fieldAliases).map(([field, aliases]) => [
+      field,
+      pickByAliases(rawRow || [], indexMap, aliases),
+    ])
+  );
+}
+
 function scanRowLabelValue(rows, labels) {
   const targets = new Set(labels.map((label) => normalizeHeader(label)));
   for (const row of rows) {
@@ -513,15 +690,17 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup, runtimeOptio
           : {}
       ),
     };
+    const prefixContext = resolveFixedFieldPrefixContext(rawRows, sourceConfig);
 
     let sourcePersonCount = 0;
     let rowCount = 0;
     let emailUndefined = 0;
     let mobileUndefined = 0;
+    let carryForwardContext = {};
 
     for (let rowIndex = startRow - 1; rowIndex < rawRows.length; rowIndex += 1) {
       const rawRow = rawRows[rowIndex] || [];
-      const extracted = Object.fromEntries(
+      let extracted = Object.fromEntries(
         Object.entries(columnMap).map(([field, columnIndexes]) => [
           field,
           columnIndexes
@@ -529,6 +708,11 @@ function buildRowsFixedColumns(profile, workbookData, courseLookup, runtimeOptio
             .find((value) => value) || null,
         ])
       );
+
+      const carryForwardResult = applyCarryForwardContext(extracted, carryForwardContext, sourceConfig);
+      extracted = carryForwardResult.rowData;
+      carryForwardContext = carryForwardResult.carryForwardContext;
+      extracted = applyFieldPrefixes(extracted, prefixContext);
 
       if (!hasRequiredValue(extracted, requiredAny)) {
         continue;
@@ -592,7 +776,6 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
   const undefinedIfMissing = profile.undefined_if_missing || [];
   const requiredAny = sourceConfig.required_any || ["user_id", "name", "email", "mobile"];
   const fieldAliases = sourceConfig.field_aliases || {};
-  const headerKeywords = sourceConfig.header_keywords || [];
   const sheetContextLabels = sourceConfig.sheet_context_labels || {};
   const selectedSheets = chooseSheetNames(sheetNames, sourceConfig);
   const manualSheetCourseCodes = normalizeRuntimeSheetMap(runtimeOptions.manual_sheet_course_codes || {});
@@ -621,13 +804,29 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
       throw error;
     }
 
+    const { rowIndex: headerRowIndex, headerRow } = headerInfo;
+    const indexMap = getHeaderIndexMap(headerRow);
+    const hasDataRows = rawRows.slice(headerRowIndex + 1).some((rawRow) =>
+      hasRequiredValue(buildHeaderAliasRowData(rawRow, indexMap, fieldAliases), requiredAny)
+    );
+
+    if (!hasDataRows) {
+      sheetStats.push({
+        sheet_name: sheetName,
+        header_row: headerRowIndex + 1,
+        source_person_count: 0,
+        row_count: 0,
+        email_undefined: 0,
+        mobile_undefined: 0,
+      });
+      continue;
+    }
+
     if (sourceConfig.require_manual_course_codes && !manualSheetCourseCodes[sheetName]) {
       missingManualCourseSheets.push(sheetName);
       continue;
     }
 
-    const { rowIndex: headerRowIndex, headerRow } = headerInfo;
-    const indexMap = getHeaderIndexMap(headerRow);
     const preHeaderRows = rawRows.slice(0, headerRowIndex);
     const sheetContext = Object.fromEntries(
       Object.entries(sheetContextLabels).map(([field, labels]) => [
@@ -651,12 +850,7 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
     let mobileUndefined = 0;
 
     for (const rawRow of rawRows.slice(headerRowIndex + 1)) {
-      const extracted = Object.fromEntries(
-        Object.entries(fieldAliases).map(([field, aliases]) => [
-          field,
-          pickByAliases(rawRow || [], indexMap, aliases),
-        ])
-      );
+      const extracted = buildHeaderAliasRowData(rawRow, indexMap, fieldAliases);
 
       if (!hasRequiredValue(extracted, requiredAny)) {
         continue;
