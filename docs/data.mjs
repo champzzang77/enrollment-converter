@@ -99,6 +99,240 @@ export const AFFILIATE_CODE_LOOKUP = {
   "한국중독연구재단": "57271",
 };
 
+export const PROFILE_FAMILIES = [
+  {
+    id: "completed_application",
+    label: "1. 완성 입과 신청서",
+    description: "과정코드와 수강생 정보가 이미 같은 표 안에 들어 있는 유형입니다.",
+    use_when: "입과양식, 입과신청서처럼 과정코드, 이름, 희망 ID가 이미 표에 함께 있을 때",
+    example_file: "2026_휴넷 입과 신청서.xltx",
+    hints: [
+      "한 시트일 수도 있고 여러 시트일 수도 있습니다.",
+      "과정코드는 파일 안에 이미 들어 있어서 따로 입력하지 않습니다.",
+      "표준 입과 신청서와 기존 휴넷 입과양식이 이 묶음에 포함됩니다.",
+    ],
+  },
+  {
+    id: "general_roster",
+    label: "2. 일반 명단 파일",
+    description: "자유 양식, 한 시트 명단, 여러 시트 명단처럼 일반적인 대상자 명단 파일을 읽는 유형입니다.",
+    use_when: "헤더에 이름, 사번, 이메일, 휴대폰 같은 항목이 보이고 형식이 제각각일 때",
+    example_file: "고객사 제공 수강 대상자 명단.xlsx",
+    hints: [
+      "안내 시트가 섞여 있어도 실제 명단표를 먼저 찾아봅니다.",
+      "과정코드가 파일 안에 있으면 그대로 사용하고, 없는 경우엔 다른 상위 유형이 더 잘 맞을 수 있습니다.",
+      "형식이 애매할 때 가장 먼저 시도하기 좋은 묶음입니다.",
+    ],
+  },
+  {
+    id: "manual_course_code",
+    label: "3. 과정코드 직접 입력",
+    description: "명단은 파일 안에 있지만 과정코드는 메일이나 메신저로 따로 받은 경우에 쓰는 유형입니다.",
+    use_when: "과정명은 보이거나 시트별 명단은 있는데, 과정코드만 파일 밖에서 따로 받았을 때",
+    example_file: "26년 상반기 정기교육명단(입과용).xlsx",
+    hints: [
+      "시트별로 붙여넣거나, 실제 명단 시트 순서대로 과정코드를 입력할 수 있습니다.",
+      "한 장짜리 추가 명단표처럼 과정코드 한 줄만 넣으면 되는 형식도 포함됩니다.",
+      "파일을 올리면 내부 세부 유형을 자동으로 골라 입력칸 안내를 맞춰 줍니다.",
+    ],
+  },
+  {
+    id: "bundle_expansion",
+    label: "4. 묶음형/확장형",
+    description: "한 사람 아래에 여러 과정이 묶이거나, 시트 상단의 과정 목록을 전체 대상자에게 확장해야 하는 유형입니다.",
+    use_when: "과정코드가 일부 줄에만 있거나, 한 사람이 여러 과정으로 자동 확장되어야 할 때",
+    example_file: "★ 2026년도 과정 사이버교육 단체입과 신청양식 (여의도성모병원)_25.12.11~26.03.13.xlsm",
+    hints: [
+      "일반 입과양식처럼 보여도 실제로는 과정 확장이 필요한 특수 구조가 여기에 들어갑니다.",
+      "이름과 ID를 아래 과정 행에 이어 붙이거나, 상단 과정 묶음을 전체 명단에 적용합니다.",
+      "파일 구조 추천이 특히 중요한 묶음입니다.",
+    ],
+  },
+  {
+    id: "org_preset",
+    label: "5. 기관 전용 자동매핑",
+    description: "특정 기관 전용 양식으로, 과정코드 연결 규칙이 앱 안에 미리 들어 있는 유형입니다.",
+    use_when: "대전성모, 국제성모처럼 기관별 고정 양식을 반복적으로 받을 때",
+    example_file: "★휴넷_단체입과명단(국제성모병원)_0318 (2026최초입과).xlsx",
+    hints: [
+      "기관명이나 시트 구조가 맞으면 과정코드를 자동으로 연결합니다.",
+      "일반 명단 유형보다 더 강한 전용 규칙을 우선 적용합니다.",
+      "기관 전용 파일이 아니라면 다른 상위 유형이 더 잘 맞습니다.",
+    ],
+  },
+];
+
+export const PROFILE_FAMILY_BY_PROFILE_ID = {
+  catholic_school_2026: "completed_application",
+  djsm_2026_03: "org_preset",
+  sample1_axvis: "general_roster",
+  sample2_hanwha: "general_roster",
+  sample3_sheet_course: "general_roster",
+  sample4_sheet_affiliate: "general_roster",
+  yeouido_cmc_course_bundle: "bundle_expansion",
+  generic_auto_header: "general_roster",
+  manual_sheet_course_header: "manual_course_code",
+  manual_fixed_sheet_course_codes: "manual_course_code",
+  international_stmary_group_enrollment: "org_preset",
+  multi_sheet_completed_application: "completed_application",
+  standard_enrollment_template: "completed_application",
+  single_sheet_manual_course_header: "manual_course_code",
+  upload_template_manual_course_code: "manual_course_code",
+  single_sheet_roster_manual_course_code: "manual_course_code",
+  grouped_single_sheet_application: "bundle_expansion",
+  cmc_training_team_seed_bundle: "bundle_expansion",
+};
+
+export const PROFILE_FAMILY_DEFAULT_PROFILE_ID = {
+  completed_application: "catholic_school_2026",
+  general_roster: "generic_auto_header",
+  manual_course_code: "manual_sheet_course_header",
+  bundle_expansion: "grouped_single_sheet_application",
+  org_preset: "djsm_2026_03",
+};
+
+export const STRUCTURE_PATTERNS = {
+  completed_application_sheet: {
+    scope: "sheet",
+    mode: "header_checks",
+    checks: [
+      { row: 17, col: 2, includes: "과정코드" },
+      { row: 17, col: 3, includes: "과정명" },
+      { row: 17, col: 4, includes: "이름" },
+      { row: 17, col: 5, includes: "희망id" },
+      { row: 17, col: 10, includes: "이메일" },
+      { row: 17, col: 11, includes: "휴대폰" },
+      { row: 17, col: 13, includes: "부서" },
+    ],
+  },
+  manual_course_sheet: {
+    scope: "sheet",
+    mode: "header_checks",
+    checks: [
+      { row: 1, col: 2, includes: "이름" },
+      { row: 1, col: 3, includes: "희망id" },
+      { row: 1, col: 5, includes: "이메일" },
+      { row: 1, col: 6, includes: "휴대폰" },
+      { row: 1, col: 8, includes: "부서" },
+    ],
+  },
+  manual_fixed_course_sheet: {
+    scope: "sheet",
+    mode: "header_checks",
+    checks: [
+      { row: 17, col: 2, includes: "과정명" },
+      { row: 17, col: 3, includes: "사원번호" },
+      { row: 17, col: 5, includes: "이름" },
+      { row: 17, col: 7, includes: "이메일" },
+      { row: 17, col: 8, includes: "휴대폰" },
+      { row: 17, col: 9, includes: "회사명" },
+      { row: 17, col: 10, includes: "근무부서" },
+    ],
+  },
+  single_sheet_manual_course_header: {
+    scope: "sheet",
+    mode: "header_checks",
+    checks: [
+      { row: 17, col: 3, includes: "과정명" },
+      { row: 17, col: 6, includes: "이름" },
+      { row: 17, col: 7, includes: "전화번호" },
+      { row: 17, col: 8, includes: "사번" },
+      { row: 17, col: 9, includes: "부서" },
+    ],
+  },
+  blank_course_upload_template: {
+    scope: "sheet",
+    mode: "header_checks_with_row_scan",
+    checks: [
+      { row: 0, col: 0, includes: "과정코드" },
+      { row: 0, col: 1, includes: "기수" },
+      { row: 0, col: 2, includes: "기업코드" },
+      { row: 0, col: 3, includes: "계열사코드" },
+      { row: 0, col: 4, includes: "id" },
+      { row: 0, col: 5, includes: "이름" },
+      { row: 0, col: 8, includes: "이메일" },
+      { row: 0, col: 10, includes: "휴대폰" },
+    ],
+    row_scan: {
+      start_row: 1,
+      metrics: [
+        { id: "person_rows", any_filled_columns: [4, 5] },
+        {
+          id: "blank_course_rows",
+          any_filled_columns: [4, 5],
+          empty_columns: [0],
+        },
+      ],
+      conditions: [
+        { left: "person_rows", operator: ">=", right: 2 },
+        { left: "blank_course_rows", operator: ">=", right: 2 },
+        { left: "blank_course_rows", operator: ">=", right_metric: "person_rows" },
+      ],
+    },
+  },
+  grouped_single_sheet_application: {
+    scope: "sheet",
+    mode: "header_checks_with_row_scan",
+    checks: [
+      { row: 17, col: 2, includes: "과정코드" },
+      { row: 17, col: 3, includes: "과정명" },
+      { row: 17, col: 4, includes: "이름" },
+      { row: 17, col: 5, includes: "희망id" },
+    ],
+    row_scan: {
+      start_row: 18,
+      metrics: [
+        { id: "course_rows", any_filled_columns: [2] },
+        { id: "anchor_rows", any_filled_columns: [4, 5] },
+      ],
+      conditions: [
+        { left: "course_rows", operator: ">=", right: 5 },
+        { left: "anchor_rows", operator: ">=", right: 2 },
+        { left: "anchor_rows", operator: "<", right_metric: "course_rows" },
+      ],
+    },
+  },
+  international_stmary_bundle: {
+    scope: "workbook",
+    mode: "required_sheet_names",
+    required_sheet_names: ["요청사항", "1. 4주기_의료인증제필수교육", "2. 법정의무교육"],
+  },
+  cmc_training_team_bundle: {
+    scope: "workbook",
+    mode: "named_sheet_pattern",
+    sheet_names: ["재직직원", "신규직원"],
+    match_mode: "any",
+    sheet_pattern: {
+      mode: "header_checks_with_row_scan",
+      checks: [
+        { row: 17, col: 2, includes: "과정코드" },
+        { row: 17, col: 3, includes: "과정명" },
+        { row: 17, col: 4, includes: "이름" },
+        { row: 17, col: 5, includes: "희망id" },
+        { row: 17, col: 10, includes: "이메일" },
+        { row: 17, col: 11, includes: "휴대폰" },
+        { row: 17, col: 13, includes: "부서" },
+      ],
+      row_scan: {
+        start_row: 18,
+        metrics: [
+          { id: "seed_course_count", any_filled_columns: [2] },
+          {
+            id: "blank_after_seed",
+            any_filled_columns: [4, 5, 6],
+            empty_columns: [2],
+            requires_metric_positive: "seed_course_count",
+          },
+        ],
+        conditions: [
+          { left: "seed_course_count", operator: ">=", right: 5 },
+          { left: "blank_after_seed", operator: ">=", right: 5 },
+        ],
+      },
+    },
+  },
+};
+
 export const PROFILES = [
   {
     id: "catholic_school_2026",
@@ -583,6 +817,13 @@ export const PROFILES = [
       "과정코드는 화면 입력칸에 붙여넣은 내용을 기준으로 시트별로 연결합니다.",
       "ID와 비밀번호는 희망ID(사번) 값을 사용합니다.",
     ],
+    structure_recommendation: {
+      pattern_id: "manual_course_sheet",
+      min_match_mode: "up_to_two",
+      min_matches: 2,
+      priority: 60,
+      message_detail: "시트별 명단 구조가 확인되었습니다. 과정코드를 따로 받은 경우 아래 입력칸에 함께 넣어 주세요.",
+    },
     source: {
       mode: "header_alias",
       require_manual_course_codes: true,
@@ -628,6 +869,12 @@ export const PROFILES = [
       "과정코드는 화면 입력칸에 붙여넣은 내용을 기준으로 시트별로 연결합니다.",
       "요청사항 같은 안내 시트는 자동으로 건너뜁니다.",
     ],
+    structure_recommendation: {
+      pattern_id: "manual_fixed_course_sheet",
+      min_matches: 2,
+      priority: 50,
+      message_detail: "여러 시트에서 단체 입과 신청양식 구조가 확인되었습니다. 과정코드를 따로 받은 경우 아래 입력칸에 시트별로 넣어 주세요.",
+    },
     source: {
       mode: "fixed_columns",
       require_manual_course_codes: true,
@@ -686,6 +933,11 @@ export const PROFILES = [
       "2026최초입과 파일의 4주기 인증제필수교육은 교직원 코드로 연결합니다.",
       "대상자가 없는 시트는 자동으로 건너뜁니다.",
     ],
+    structure_recommendation: {
+      pattern_id: "international_stmary_bundle",
+      priority: 100,
+      message_detail: "국제성모병원 단체입과명단 구조가 확인되어 과정코드까지 자동 연결하도록 맞췄습니다.",
+    },
     source: {
       mode: "fixed_columns",
       skip_sheets: ["요청사항"],
@@ -755,6 +1007,13 @@ export const PROFILES = [
       "과정코드는 각 행에 이미 입력된 값을 그대로 사용합니다.",
       "샘플로 남아 있는 홍길동/휴넷 테스트 행은 자동으로 제외합니다.",
     ],
+    structure_recommendation: {
+      pattern_id: "completed_application_sheet",
+      min_match_mode: "up_to_two",
+      min_matches: 2,
+      priority: 70,
+      message_detail: "시트 여러 장에서 완성된 입과 신청서 표 구조가 확인되어 이 유형이 더 잘 맞아 보입니다.",
+    },
     source: {
       mode: "fixed_columns",
       start_row: 19,
@@ -870,6 +1129,12 @@ export const PROFILES = [
       "상단 회사 정보의 회사명을 읽어 회사와 계열사코드를 자동으로 채웁니다.",
       "전화번호 열에 휴대폰 번호가 들어 있으면 휴대폰으로 사용합니다.",
     ],
+    structure_recommendation: {
+      pattern_id: "single_sheet_manual_course_header",
+      min_matches: 1,
+      priority: 80,
+      message_detail: "한 장짜리 추가 명단표 구조가 확인되었습니다. 아래 입력칸에 과정코드만 한 번 넣어 주세요.",
+    },
     source: {
       mode: "header_alias",
       first_sheet_only: true,
@@ -921,6 +1186,12 @@ export const PROFILES = [
       "회사, 부서 같은 공통 값도 같은 사람 묶음 안에서 자동으로 이어 붙입니다.",
       "이메일 또는 휴대폰이 비어 있으면 undefined로 채웁니다.",
     ],
+    structure_recommendation: {
+      pattern_id: "grouped_single_sheet_application",
+      min_matches: 1,
+      priority: 90,
+      message_detail: "한 사람 아래에 여러 과정이 묶인 입과 신청서 구조가 확인되어, 이름과 ID를 아래 과정들에 자동으로 이어 붙이도록 맞췄습니다.",
+    },
     source: {
       mode: "fixed_columns",
       include_sheets: ["입과양식"],
@@ -974,6 +1245,140 @@ export const PROFILES = [
     },
   },
   {
+    id: "upload_template_manual_course_code",
+    label: "17. 업로드 양식 + 과정코드 직접 입력",
+    short_description: "업로드 양식 헤더는 맞는데 과정코드 열만 비어 있는 파일",
+    description:
+      "이미 업로드 양식 형태로 정리되어 있지만 과정코드만 비어 있는 파일입니다. 아래 입력칸에 과정코드를 한 번만 넣어 전체 행에 적용합니다.",
+    use_when:
+      "첫 줄 헤더가 M(과정코드), A(ID), B(이름)처럼 업로드 양식 그대로이고 과정코드 열만 비어 있을 때",
+    example_file: "청주성모병원_대상자명단_lms_일괄등록양식.xlsx",
+    hints: [
+      "이미 업로드 파일에 가까운 형식이라 과정코드만 채우면 바로 변환됩니다.",
+      "기수, 기업코드, 계열사코드, 회사, 부서 같은 값은 파일에 들어 있는 내용을 그대로 읽습니다.",
+      "한 장짜리 파일이면 과정코드를 한 줄만 넣으면 됩니다.",
+    ],
+    copy_if_missing: {
+      password: "user_id",
+    },
+    undefined_if_missing: ["email", "mobile"],
+    manual_course_input: {
+      required: true,
+      label: "선택 입력. 과정코드 직접 입력",
+      note: "이 유형은 업로드 양식의 과정코드 열만 비어 있는 경우에 씁니다. 아래 입력칸에 과정코드를 한 번만 적어 주세요. 예: `과정코드 : HLAP21547`",
+      placeholder: "과정코드 : HLAP21547",
+    },
+    assumptions: [
+      "첫 번째 시트의 첫 줄을 업로드 양식 헤더로 보고 읽습니다.",
+      "과정코드는 화면 입력칸에 넣은 한 값을 전체 명단에 적용합니다.",
+      "이미 들어 있는 기수, 기업코드, 계열사코드와 대상자 정보는 그대로 유지합니다.",
+    ],
+    structure_recommendation: {
+      pattern_id: "blank_course_upload_template",
+      min_matches: 1,
+      priority: 85,
+      message_detail: "업로드 양식 헤더가 확인되었지만 과정코드 열이 비어 있습니다. 아래 입력칸에 과정코드를 한 번만 넣어 주세요.",
+    },
+    source: {
+      mode: "header_alias",
+      first_sheet_only: true,
+      require_manual_course_codes: true,
+      header_keywords: ["과정코드", "id", "이름"],
+      required_any: ["name", "user_id", "email", "mobile"],
+      field_aliases: {
+        course_code: ["m(과정코드)", "과정코드"],
+        generation: ["n(기수)", "기수"],
+        company_code: ["o(기업코드)", "기업코드"],
+        affiliate_code: ["p(계열사코드)", "계열사코드"],
+        user_id: ["a(id)", "id", "사용아이디", "아이디", "희망id", "희망아이디", "사번", "사원번호"],
+        name: ["b(이름)", "이름", "성명"],
+        password: ["c(비밀번호)", "비밀번호", "패스워드"],
+        rrn: ["d(주민번호)", "주민번호", "주민등록번호"],
+        email: ["e(이메일)", "이메일", "이메일주소", "메일주소"],
+        phone: ["f(전화번호)", "전화번호", "전화"],
+        mobile: ["g(휴대폰)", "휴대폰", "휴대폰번호", "휴대전화", "핸드폰"],
+        company: ["h(회사)", "회사", "회사명", "근무기관"],
+        department: ["i(부서)", "부서", "근무부서", "소속"],
+        title: ["j(직책)", "직책", "직급", "직위"],
+        method: ["k(수강방법)", "수강방법"],
+        non_regular: ["비정규직구분", "비정규직여부", "비정규직 여부"],
+        postal_code: ["배송지우편번호", "우편번호"],
+        address: ["배송지주소", "주소"],
+        sms: ["sms발송", "문자발송"],
+        mail: ["메일발송", "이메일발송"],
+        inkeum: ["인키움"],
+        manage_no: ["관리번호"],
+      },
+    },
+  },
+  {
+    id: "single_sheet_roster_manual_course_code",
+    label: "18. 한 장짜리 일반 명단 + 과정코드 직접 입력",
+    short_description: "한 시트 일반 명단이고 과정코드는 파일 밖에서 따로 받은 파일",
+    description:
+      "성명, 아이디, 연락처, 메일주소처럼 일반 명단 헤더만 있고 과정코드는 파일 밖에서 따로 받은 형식입니다. 아래 입력칸에 과정코드를 한 번만 넣어 전체 명단에 적용합니다.",
+    use_when:
+      "한 장짜리 대상자 명단 파일이고, 파일 안에는 과정코드나 과정명이 없지만 같은 과정으로 일괄 등록해야 할 때",
+    example_file: "청주성모병원_상반기 안전보건교육 대상자명단.xlsx",
+    hints: [
+      "대상자 명단만 있는 단순 파일이라면 이 유형이 잘 맞습니다.",
+      "성명, 아이디, 연락처, 메일주소 같은 열만 있어도 읽을 수 있습니다.",
+      "한 장짜리 파일이면 과정코드를 한 줄만 넣으면 됩니다.",
+    ],
+    copy_if_missing: {
+      password: "user_id",
+    },
+    undefined_if_missing: ["email", "mobile"],
+    manual_course_input: {
+      required: true,
+      label: "선택 입력. 과정코드 직접 입력",
+      note: "이 유형은 일반 대상자 명단만 있고 과정코드가 파일 밖에 있는 경우에 씁니다. 아래 입력칸에 과정코드를 한 번만 적어 주세요. 예: `과정코드 : HLAP21547`",
+      placeholder: "과정코드 : HLAP21547",
+    },
+    assumptions: [
+      "첫 번째로 찾은 명단 헤더 아래 행들을 실제 대상자로 읽습니다.",
+      "과정코드는 화면 입력칸에 넣은 한 값을 전체 명단에 적용합니다.",
+      "ID가 비어 있으면 사용아이디/아이디/희망ID/사번 계열 열을 순서대로 찾습니다.",
+    ],
+    structure_recommendation: {
+      mode: "header_alias_sheet",
+      single_sheet_only: true,
+      require_missing_course_code: true,
+      min_matches: 1,
+      priority: 58,
+      message_detail: "한 장짜리 일반 명단 구조가 확인되었고 과정코드 열이 없습니다. 아래 입력칸에 과정코드를 한 번만 넣어 주세요.",
+    },
+    source: {
+      mode: "header_alias",
+      first_sheet_only: true,
+      require_manual_course_codes: true,
+      ignore_missing_header: true,
+      header_keyword_groups: [
+        ["이름", "이메일"],
+        ["성명", "메일주소"],
+        ["이름", "휴대폰"],
+        ["성명", "휴대폰번호"],
+        ["사번", "성명"],
+        ["사용아이디", "이름"],
+        ["아이디", "성명"],
+      ],
+      required_any: ["name", "user_id", "email", "mobile"],
+      field_aliases: {
+        course_code: ["과정코드"],
+        user_id: ["사용아이디", "아이디", "id", "희망id", "희망아이디", "사번", "사원번호", "임직원번호"],
+        name: ["이름", "성명", "사원명"],
+        password: ["비밀번호", "패스워드"],
+        rrn: ["주민등록번호", "주민번호"],
+        email: ["이메일", "이메일주소", "메일주소", "email"],
+        phone: ["전화번호", "전화", "내선번호"],
+        mobile: ["휴대폰", "휴대폰번호", "핸드폰", "핸드폰번호", "연락처", "휴대전화"],
+        company: ["회사명", "소속기관", "소속회사명", "회사", "기관명"],
+        department: ["부서", "소속", "근무부서"],
+        title: ["직책", "직급", "직위"],
+      },
+    },
+  },
+  {
     id: "cmc_training_team_seed_bundle",
     label: "16. 수련교육팀 과정묶음 입과 신청서",
     short_description: "상단 과정코드 묶음을 전체 대상자에게 확장해야 하는 파일",
@@ -1001,6 +1406,11 @@ export const PROFILES = [
       "시트의 모든 대상자는 그 시트의 과정 수만큼 자동 확장합니다.",
       "회사명은 우선 M열 값을 사용하고, 비어 있으면 H열 값을 사용합니다.",
     ],
+    structure_recommendation: {
+      pattern_id: "cmc_training_team_bundle",
+      priority: 95,
+      message_detail: "재직직원/신규직원 시트 상단의 과정코드 묶음을 모든 대상자에게 자동 확장하도록 맞췄습니다.",
+    },
     source: {
       mode: "fixed_columns",
       start_row: 19,

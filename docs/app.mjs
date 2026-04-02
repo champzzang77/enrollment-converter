@@ -1,11 +1,17 @@
-import { PROFILES } from "./data.mjs";
+import {
+  PROFILES,
+  PROFILE_FAMILIES,
+  PROFILE_FAMILY_BY_PROFILE_ID,
+  PROFILE_FAMILY_DEFAULT_PROFILE_ID,
+  STRUCTURE_PATTERNS,
+} from "./data.mjs";
 import { runProfile } from "./engine.mjs";
 
 const STORAGE_KEY = "enrollment-upload-static-usage-log-v2";
 const LEGACY_STORAGE_KEYS = ["enrollment-upload-static-usage-log-v1"];
 const ALLOWED_EXTENSIONS = new Set([".xlsx", ".xlsm", ".xltx", ".xltm", ".xls"]);
 
-const profileSelect = document.getElementById("profileSelect");
+const familySelect = document.getElementById("familySelect");
 const fileInput = document.getElementById("fileInput");
 const convertButton = document.getElementById("convertButton");
 const downloadLink = document.getElementById("downloadLink");
@@ -18,6 +24,7 @@ const guideTitle = document.getElementById("guideTitle");
 const guideDescription = document.getElementById("guideDescription");
 const guideUseWhen = document.getElementById("guideUseWhen");
 const guideExample = document.getElementById("guideExample");
+const guideVariant = document.getElementById("guideVariant");
 const guideHints = document.getElementById("guideHints");
 const recommendBadge = document.getElementById("recommendBadge");
 const manualCourseField = document.getElementById("manualCourseField");
@@ -31,6 +38,9 @@ const todayUsageCount = document.getElementById("todayUsageCount");
 let latestDownloadUrl = "";
 let recommendedProfileId = "";
 let recommendedProfileReason = "";
+let selectedProfileId = "";
+let latestWorkbookData = [];
+let latestInputFileName = "";
 
 function clearLegacyUsageData() {
   LEGACY_STORAGE_KEYS.forEach((key) => {
@@ -42,8 +52,49 @@ function clearLegacyUsageData() {
   });
 }
 
+function getProfileById(profileId) {
+  return PROFILES.find((item) => item.id === profileId) || null;
+}
+
+function getProfileFamilyId(profileOrId) {
+  const profileId = typeof profileOrId === "string" ? profileOrId : profileOrId?.id;
+  return PROFILE_FAMILY_BY_PROFILE_ID[profileId] || "";
+}
+
+function getSelectedFamily() {
+  return PROFILE_FAMILIES.find((item) => item.id === familySelect.value) || null;
+}
+
+function getFamilyProfiles(familyId) {
+  return PROFILES.filter((profile) => getProfileFamilyId(profile) === familyId);
+}
+
+function sortProfiles(profiles) {
+  return [...profiles].sort((left, right) => {
+    const orderDiff = getProfileDisplayOrder(left) - getProfileDisplayOrder(right);
+    if (orderDiff !== 0) {
+      return orderDiff;
+    }
+    return String(left.label || "").localeCompare(String(right.label || ""), "ko");
+  });
+}
+
+function getDefaultProfileForFamily(familyId) {
+  const defaultProfileId = PROFILE_FAMILY_DEFAULT_PROFILE_ID[familyId];
+  const defaultProfile = getProfileById(defaultProfileId);
+  if (defaultProfile) {
+    return defaultProfile;
+  }
+  return sortProfiles(getFamilyProfiles(familyId))[0] || null;
+}
+
 function getSelectedProfile() {
-  return PROFILES.find((item) => item.id === profileSelect.value) || null;
+  const family = getSelectedFamily();
+  const selectedProfile = getProfileById(selectedProfileId);
+  if (selectedProfile && family && getProfileFamilyId(selectedProfile) === family.id) {
+    return selectedProfile;
+  }
+  return family ? getDefaultProfileForFamily(family.id) : null;
 }
 
 function getProfileDisplayOrder(profile) {
@@ -51,34 +102,29 @@ function getProfileDisplayOrder(profile) {
   return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 }
 
-function renderProfiles() {
-  const sortedProfiles = [...PROFILES].sort((left, right) => {
-    const orderDiff = getProfileDisplayOrder(left) - getProfileDisplayOrder(right);
-    if (orderDiff !== 0) {
-      return orderDiff;
-    }
-    return String(left.label || "").localeCompare(String(right.label || ""), "ko");
-  });
-
-  sortedProfiles.forEach((profile) => {
+function renderFamilies() {
+  PROFILE_FAMILIES.forEach((profileFamily) => {
     const option = document.createElement("option");
-    option.value = profile.id;
-    option.textContent = `${profile.label} - ${profile.short_description}`;
-    profileSelect.appendChild(option);
+    option.value = profileFamily.id;
+    option.textContent = profileFamily.label;
+    familySelect.appendChild(option);
   });
-  if (!profileSelect.value && sortedProfiles[0]) {
-    profileSelect.value = sortedProfiles[0].id;
+  if (!familySelect.value && PROFILE_FAMILIES[0]) {
+    familySelect.value = PROFILE_FAMILIES[0].id;
   }
+  selectedProfileId = getDefaultProfileForFamily(familySelect.value)?.id || "";
   updateProfileGuide();
 }
 
 function updateProfileGuide() {
+  const family = getSelectedFamily();
   const profile = getSelectedProfile();
-  if (!profile) {
-    guideTitle.textContent = "파일 유형을 선택해 주세요";
-    guideDescription.textContent = "선택한 유형에 대한 설명이 여기에 표시됩니다.";
+  if (!family) {
+    guideTitle.textContent = "상위 유형을 선택해 주세요";
+    guideDescription.textContent = "선택한 상위 유형 설명이 여기에 표시됩니다.";
     guideUseWhen.textContent = "-";
     guideExample.textContent = "-";
+    guideVariant.textContent = "-";
     guideHints.innerHTML = "";
     recommendBadge.textContent = "직접 선택";
     recommendBadge.className = "badge badge-neutral";
@@ -86,28 +132,33 @@ function updateProfileGuide() {
     return;
   }
 
-  guideTitle.textContent = profile.label;
-  guideDescription.textContent = profile.description;
-  guideUseWhen.textContent = profile.use_when;
-  guideExample.textContent = profile.example_file;
+  guideTitle.textContent = family.label;
+  guideDescription.textContent = family.description;
+  guideUseWhen.textContent = family.use_when;
+  guideExample.textContent = family.example_file;
+  guideVariant.textContent = profile
+    ? `${profile.label} - ${profile.short_description}`
+    : "파일을 올리면 내부 세부 유형을 자동으로 고릅니다.";
   guideHints.innerHTML = "";
-  profile.hints.forEach((hint) => {
+  family.hints.forEach((hint) => {
     const item = document.createElement("li");
     item.textContent = hint;
     guideHints.appendChild(item);
   });
 
-  if (recommendedProfileId && recommendedProfileId === profile.id) {
-    recommendBadge.textContent = recommendedProfileReason === "structure"
-      ? "파일 구조 기준 추천"
-      : "파일명 기준 추천";
+  const recommendedFamilyId = getProfileFamilyId(recommendedProfileId);
+  if (recommendedProfileId && family.id === recommendedFamilyId) {
+    recommendBadge.textContent =
+      profile && recommendedProfileId === profile.id
+        ? (recommendedProfileReason === "structure" ? "파일 구조 기준 추천" : "파일명 기준 추천")
+        : "추천된 상위 유형";
     recommendBadge.className = "badge badge-recommend";
   } else {
     recommendBadge.textContent = "직접 선택";
     recommendBadge.className = "badge badge-neutral";
   }
 
-  const manualCourseConfig = profile.manual_course_input;
+  const manualCourseConfig = profile?.manual_course_input;
   if (manualCourseConfig) {
     manualCourseField.hidden = false;
     manualCourseLabel.textContent = manualCourseConfig.label || "선택 입력. 시트별 과정코드 직접 입력";
@@ -135,152 +186,176 @@ function normalizeHeaderText(value) {
     .replace(/\*/g, "");
 }
 
+function pickProfileByFileName(fileName, candidates = PROFILES) {
+  const normalizedName = normalizeFileNameMatch(fileName);
+  let matched = null;
+  let matchedScore = -1;
+
+  candidates.forEach((profile) => {
+    (profile.filename_keywords || []).forEach((keyword) => {
+      const normalizedKeyword = normalizeFileNameMatch(keyword);
+      if (!normalizedKeyword || !normalizedName.includes(normalizedKeyword)) {
+        return;
+      }
+
+      const score = normalizedKeyword.length;
+      if (score > matchedScore) {
+        matched = profile;
+        matchedScore = score;
+      }
+    });
+  });
+
+  return matched;
+}
+
 function getCell(rows, rowIndex, columnIndex) {
   const row = rows[rowIndex] || [];
   return columnIndex < row.length ? row[columnIndex] : null;
 }
 
-function checkCompletedApplicationSheet(rows) {
-  const checks = [
-    { row: 17, col: 2, includes: "과정코드" },
-    { row: 17, col: 3, includes: "과정명" },
-    { row: 17, col: 4, includes: "이름" },
-    { row: 17, col: 5, includes: "희망id" },
-    { row: 17, col: 10, includes: "이메일" },
-    { row: 17, col: 11, includes: "휴대폰" },
-    { row: 17, col: 13, includes: "부서" },
-  ];
-
+function matchesStructureHeaderChecks(rows, checks = []) {
   return checks.every((check) =>
     normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
   );
 }
 
-function checkGroupedSingleSheetApplication(rows) {
-  const headerChecks = [
-    { row: 17, col: 2, includes: "과정코드" },
-    { row: 17, col: 3, includes: "과정명" },
-    { row: 17, col: 4, includes: "이름" },
-    { row: 17, col: 5, includes: "희망id" },
-  ];
+function matchesStructureRowMetric(row, metric, metrics) {
+  const anyFilledColumns = Array.isArray(metric.any_filled_columns) ? metric.any_filled_columns : [];
+  const allFilledColumns = Array.isArray(metric.all_filled_columns) ? metric.all_filled_columns : [];
+  const emptyColumns = Array.isArray(metric.empty_columns) ? metric.empty_columns : [];
 
-  const headerMatched = headerChecks.every((check) =>
-    normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
-  );
-
-  if (!headerMatched) {
+  if (metric.requires_metric_positive && Number(metrics[metric.requires_metric_positive] || 0) <= 0) {
     return false;
   }
 
-  let courseRows = 0;
-  let anchorRows = 0;
-  for (let rowIndex = 18; rowIndex < rows.length; rowIndex += 1) {
-    const row = rows[rowIndex] || [];
-    const courseCode = String(row[2] || "").trim();
-    const name = String(row[4] || "").trim();
-    const userId = String(row[5] || "").trim();
-    if (courseCode) {
-      courseRows += 1;
-    }
-    if (name || userId) {
-      anchorRows += 1;
-    }
+  if (anyFilledColumns.length && !anyFilledColumns.some((columnIndex) => hasFilledValue(row[columnIndex]))) {
+    return false;
   }
 
-  return courseRows >= 5 && anchorRows >= 2 && anchorRows < courseRows;
+  if (allFilledColumns.length && !allFilledColumns.every((columnIndex) => hasFilledValue(row[columnIndex]))) {
+    return false;
+  }
+
+  if (emptyColumns.length && !emptyColumns.every((columnIndex) => !hasFilledValue(row[columnIndex]))) {
+    return false;
+  }
+
+  return true;
 }
 
-function checkCmcTrainingTeamBundle(workbookData) {
-  const targetSheets = ["재직직원", "신규직원"];
-  const matchedSheets = workbookData.filter((sheet) => targetSheets.includes(sheet.name));
-  if (!matchedSheets.length) {
-    return false;
+function collectStructureRowMetrics(rows, rowScan = {}) {
+  const metricConfigs = Array.isArray(rowScan.metrics) ? rowScan.metrics : [];
+  const metrics = Object.fromEntries(metricConfigs.map((metric) => [metric.id, 0]));
+  const startRow = Number(rowScan.start_row || 0);
+
+  for (let rowIndex = startRow; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] || [];
+    metricConfigs.forEach((metric) => {
+      if (matchesStructureRowMetric(row, metric, metrics)) {
+        metrics[metric.id] = Number(metrics[metric.id] || 0) + 1;
+      }
+    });
   }
 
-  return matchedSheets.some((sheet) => {
-    const rows = sheet.rows || [];
-    const checks = [
-      { row: 17, col: 2, includes: "과정코드" },
-      { row: 17, col: 3, includes: "과정명" },
-      { row: 17, col: 4, includes: "이름" },
-      { row: 17, col: 5, includes: "희망id" },
-      { row: 17, col: 10, includes: "이메일" },
-      { row: 17, col: 11, includes: "휴대폰" },
-      { row: 17, col: 13, includes: "부서" },
-    ];
+  return metrics;
+}
 
-    const headerMatched = checks.every((check) =>
-      normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
-    );
-
-    if (!headerMatched) {
+function compareStructureValues(leftValue, operator, rightValue) {
+  switch (operator) {
+    case ">=":
+      return leftValue >= rightValue;
+    case ">":
+      return leftValue > rightValue;
+    case "<=":
+      return leftValue <= rightValue;
+    case "<":
+      return leftValue < rightValue;
+    case "===":
+    case "==":
+      return leftValue === rightValue;
+    default:
       return false;
-    }
+  }
+}
 
-    let seedCourseCount = 0;
-    let blankAfterSeed = 0;
-    for (let rowIndex = 18; rowIndex < rows.length; rowIndex += 1) {
-      const row = rows[rowIndex] || [];
-      const courseCode = String(row[2] || "").trim();
-      const name = String(row[4] || "").trim();
-      const userId = String(row[5] || row[6] || "").trim();
-
-      if (courseCode) {
-        seedCourseCount += 1;
-        continue;
-      }
-
-      if ((name || userId) && seedCourseCount > 0) {
-        blankAfterSeed += 1;
-      }
-    }
-
-    return seedCourseCount >= 5 && blankAfterSeed >= 5;
+function matchesStructureConditions(metrics, conditions = []) {
+  return conditions.every((condition) => {
+    const leftValue = Number(metrics[condition.left] || 0);
+    const rightValue =
+      typeof condition.right_metric === "string"
+        ? Number(metrics[condition.right_metric] || 0)
+        : Number(condition.right || 0);
+    return compareStructureValues(leftValue, condition.operator, rightValue);
   });
 }
 
-function checkManualCourseSheet(rows) {
-  const checks = [
-    { row: 1, col: 2, includes: "이름" },
-    { row: 1, col: 3, includes: "희망id" },
-    { row: 1, col: 5, includes: "이메일" },
-    { row: 1, col: 6, includes: "휴대폰" },
-    { row: 1, col: 8, includes: "부서" },
-  ];
+function evaluateSheetStructurePattern(rows, pattern) {
+  if (!pattern) {
+    return false;
+  }
 
-  return checks.every((check) =>
-    normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
-  );
+  if (pattern.mode === "header_checks") {
+    return matchesStructureHeaderChecks(rows, pattern.checks || []);
+  }
+
+  if (pattern.mode === "header_checks_with_row_scan") {
+    if (!matchesStructureHeaderChecks(rows, pattern.checks || [])) {
+      return false;
+    }
+    const rowMetrics = collectStructureRowMetrics(rows, pattern.row_scan || {});
+    return matchesStructureConditions(rowMetrics, pattern.row_scan?.conditions || []);
+  }
+
+  return false;
 }
 
-function checkSingleSheetManualCourseSheet(rows) {
-  const checks = [
-    { row: 17, col: 3, includes: "과정명" },
-    { row: 17, col: 6, includes: "이름" },
-    { row: 17, col: 7, includes: "전화번호" },
-    { row: 17, col: 8, includes: "사번" },
-    { row: 17, col: 9, includes: "부서" },
-  ];
+function evaluateWorkbookStructurePattern(workbookData, pattern) {
+  if (!pattern || !Array.isArray(workbookData) || workbookData.length === 0) {
+    return false;
+  }
 
-  return checks.every((check) =>
-    normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
-  );
+  if (pattern.mode === "required_sheet_names") {
+    const sheetNames = new Set(workbookData.map((sheet) => sheet.name));
+    return (pattern.required_sheet_names || []).every((sheetName) => sheetNames.has(sheetName));
+  }
+
+  if (pattern.mode === "named_sheet_pattern") {
+    const targetSheetNames = new Set(pattern.sheet_names || []);
+    const matchedSheets = workbookData.filter((sheet) => targetSheetNames.has(sheet.name));
+    if (!matchedSheets.length) {
+      return false;
+    }
+
+    const matchedCount = matchedSheets.filter((sheet) =>
+      evaluateSheetStructurePattern(sheet.rows || [], pattern.sheet_pattern || null)
+    ).length;
+
+    if (pattern.match_mode === "all") {
+      return matchedCount === matchedSheets.length;
+    }
+
+    return matchedCount >= Number(pattern.min_matches || 1);
+  }
+
+  return false;
 }
 
-function checkManualFixedCourseSheet(rows) {
-  const checks = [
-    { row: 17, col: 2, includes: "과정명" },
-    { row: 17, col: 3, includes: "사원번호" },
-    { row: 17, col: 5, includes: "이름" },
-    { row: 17, col: 7, includes: "이메일" },
-    { row: 17, col: 8, includes: "휴대폰" },
-    { row: 17, col: 9, includes: "회사명" },
-    { row: 17, col: 10, includes: "근무부서" },
-  ];
+function matchesStructurePattern(patternId, input) {
+  const pattern = STRUCTURE_PATTERNS[patternId];
+  if (!pattern) {
+    return false;
+  }
 
-  return checks.every((check) =>
-    normalizeHeaderText(getCell(rows, check.row, check.col)).includes(check.includes)
-  );
+  if (pattern.scope === "sheet") {
+    return evaluateSheetStructurePattern(Array.isArray(input) ? input : [], pattern);
+  }
+
+  if (pattern.scope === "workbook") {
+    return evaluateWorkbookStructurePattern(Array.isArray(input) ? input : [], pattern);
+  }
+
+  return false;
 }
 
 function hasManualFixedCourseData(rows) {
@@ -297,131 +372,165 @@ function hasManualFixedCourseData(rows) {
   return false;
 }
 
-function checkInternationalStMaryBundle(workbookData) {
-  const sheetNames = new Set((workbookData || []).map((sheet) => sheet.name));
-  return (
-    sheetNames.has("요청사항") &&
-    sheetNames.has("1. 4주기_의료인증제필수교육") &&
-    sheetNames.has("2. 법정의무교육")
-  );
+function getStructureRecommendationThreshold(config, workbookData) {
+  const requestedMatches = Number(config.min_matches || 1);
+  if (config.min_match_mode === "up_to_two") {
+    return Math.min(requestedMatches, workbookData.length);
+  }
+  if (config.min_match_mode === "all") {
+    return workbookData.length;
+  }
+  return requestedMatches;
 }
 
-function recommendProfileByWorkbookStructure(workbookData) {
-  const completedProfile = PROFILES.find((profile) => profile.id === "multi_sheet_completed_application");
-  const manualProfile = PROFILES.find((profile) => profile.id === "manual_sheet_course_header");
-  const manualFixedProfile = PROFILES.find((profile) => profile.id === "manual_fixed_sheet_course_codes");
-  const internationalStMaryProfile = PROFILES.find((profile) => profile.id === "international_stmary_group_enrollment");
-  const singleSheetManualProfile = PROFILES.find((profile) => profile.id === "single_sheet_manual_course_header");
-  const groupedSingleSheetProfile = PROFILES.find((profile) => profile.id === "grouped_single_sheet_application");
-  const cmcTrainingTeamProfile = PROFILES.find((profile) => profile.id === "cmc_training_team_seed_bundle");
+function buildStructureRecommendation(profile, config, reason = "structure") {
+  return {
+    profile,
+    reason,
+    message: `<strong>${profile.label}</strong> 형식으로 추천했습니다.<br>${
+      config.message_detail || "파일 구조가 확인되었습니다."
+    }`,
+  };
+}
 
-  if (!Array.isArray(workbookData) || workbookData.length === 0) {
+function evaluateStructureRecommendation(profile, workbookData) {
+  const config = profile.structure_recommendation;
+  if (!config || !Array.isArray(workbookData) || workbookData.length === 0) {
     return null;
   }
 
-  if (internationalStMaryProfile && checkInternationalStMaryBundle(workbookData)) {
-    return {
-      profile: internationalStMaryProfile,
-      reason: "structure",
-      message: `<strong>${internationalStMaryProfile.label}</strong> 형식으로 추천했습니다.<br>국제성모병원 단체입과명단 구조가 확인되어 과정코드까지 자동 연결하도록 맞췄습니다.`,
-    };
+  if (config.mode === "header_alias_sheet") {
+    if (config.single_sheet_only && workbookData.length !== 1) {
+      return null;
+    }
+
+    const sourceConfig = profile.source || {};
+    const matchedSheets = workbookData.filter((sheet) => {
+      try {
+        const summary = summarizeHeaderAliasData(sheet.rows || [], sourceConfig);
+        if (summary.dataRowCount <= 0) {
+          return false;
+        }
+        if (config.require_missing_course_code && summary.courseCodeValueCount > 0) {
+          return false;
+        }
+        return true;
+      } catch (_error) {
+        return false;
+      }
+    });
+
+    const threshold = getStructureRecommendationThreshold(config, workbookData);
+    if (matchedSheets.length >= threshold) {
+      return buildStructureRecommendation(profile, config);
+    }
+    return null;
   }
 
-  if (cmcTrainingTeamProfile && checkCmcTrainingTeamBundle(workbookData)) {
-    return {
-      profile: cmcTrainingTeamProfile,
-      reason: "structure",
-      message: `<strong>${cmcTrainingTeamProfile.label}</strong> 형식으로 추천했습니다.<br>재직직원/신규직원 시트 상단의 과정코드 묶음을 모든 대상자에게 자동 확장하도록 맞췄습니다.`,
-    };
+  const pattern = STRUCTURE_PATTERNS[config.pattern_id];
+  if (!pattern) {
+    return null;
   }
 
-  const groupedSingleSheetMatches = workbookData.filter((sheet) =>
-    checkGroupedSingleSheetApplication(sheet.rows || [])
-  );
-  if (groupedSingleSheetProfile && groupedSingleSheetMatches.length >= 1) {
-    return {
-      profile: groupedSingleSheetProfile,
-      reason: "structure",
-      message: `<strong>${groupedSingleSheetProfile.label}</strong> 형식으로 추천했습니다.<br>한 사람 아래에 여러 과정이 묶인 입과 신청서 구조가 확인되어, 이름과 ID를 아래 과정들에 자동으로 이어 붙이도록 맞췄습니다.`,
-    };
+  if (pattern.scope === "workbook") {
+    if (matchesStructurePattern(config.pattern_id, workbookData)) {
+      return buildStructureRecommendation(profile, config);
+    }
+    return null;
   }
 
-  const singleSheetManualMatches = workbookData.filter((sheet) =>
-    checkSingleSheetManualCourseSheet(sheet.rows || [])
-  );
-  if (singleSheetManualProfile && singleSheetManualMatches.length >= 1) {
-    return {
-      profile: singleSheetManualProfile,
-      reason: "structure",
-      message: `<strong>${singleSheetManualProfile.label}</strong> 형식으로 추천했습니다.<br>한 장짜리 추가 명단표 구조가 확인되었습니다. 아래 입력칸에 과정코드만 한 번 넣어 주세요.`,
-    };
-  }
-
-  const completedMatches = workbookData.filter((sheet) => checkCompletedApplicationSheet(sheet.rows || []));
-  if (completedProfile && completedMatches.length >= Math.min(2, workbookData.length)) {
-    return {
-      profile: completedProfile,
-      reason: "structure",
-      message: `<strong>${completedProfile.label}</strong> 형식으로 추천했습니다.<br>시트 여러 장에서 완성된 입과 신청서 표 구조가 확인되어 이 유형이 더 잘 맞아 보입니다.`,
-    };
-  }
-
-  const manualMatches = workbookData.filter((sheet) => checkManualCourseSheet(sheet.rows || []));
-  if (manualProfile && manualMatches.length >= Math.min(2, workbookData.length)) {
-    return {
-      profile: manualProfile,
-      reason: "structure",
-      message: `<strong>${manualProfile.label}</strong> 형식으로 추천했습니다.<br>시트별 명단 구조가 확인되었습니다. 과정코드를 따로 받은 경우 아래 입력칸에 함께 넣어 주세요.`,
-    };
-  }
-
-  const manualFixedMatches = workbookData.filter((sheet) => checkManualFixedCourseSheet(sheet.rows || []));
-  if (manualFixedProfile && manualFixedMatches.length >= 2) {
-    return {
-      profile: manualFixedProfile,
-      reason: "structure",
-      message: `<strong>${manualFixedProfile.label}</strong> 형식으로 추천했습니다.<br>여러 시트에서 단체 입과 신청양식 구조가 확인되었습니다. 과정코드를 따로 받은 경우 아래 입력칸에 시트별로 넣어 주세요.`,
-    };
+  if (pattern.scope === "sheet") {
+    const matchedSheets = workbookData.filter((sheet) =>
+      matchesStructurePattern(config.pattern_id, sheet.rows || [])
+    );
+    const threshold = getStructureRecommendationThreshold(config, workbookData);
+    if (matchedSheets.length >= threshold) {
+      return buildStructureRecommendation(profile, config);
+    }
   }
 
   return null;
 }
 
+function recommendProfileByWorkbookStructure(workbookData) {
+  if (!Array.isArray(workbookData) || workbookData.length === 0) {
+    return null;
+  }
+
+  const recommendationProfiles = [...PROFILES]
+    .filter((profile) => profile.structure_recommendation)
+    .sort((left, right) => {
+      const priorityDiff =
+        Number(right.structure_recommendation?.priority || 0) -
+        Number(left.structure_recommendation?.priority || 0);
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+      return getProfileDisplayOrder(left) - getProfileDisplayOrder(right);
+    });
+
+  for (const profile of recommendationProfiles) {
+    const recommendation = evaluateStructureRecommendation(profile, workbookData);
+    if (recommendation) {
+      return recommendation;
+    }
+  }
+
+  return null;
+}
+
+function formatRecommendationMessage(profile, message) {
+  const family = PROFILE_FAMILIES.find((item) => item.id === getProfileFamilyId(profile));
+  const intro = `<strong>${family?.label || profile.label}</strong> 유형으로 추천했습니다.<br>내부 세부 유형은 <strong>${profile.label}</strong>로 맞췄습니다.`;
+  const detail = String(message || "").replace(/^<strong>.*?<\/strong>\s*(?:형식|유형)으로 추천했습니다\.<br>/, "");
+  return detail ? `${intro}<br>${detail}` : intro;
+}
+
 function applyRecommendation(profile, reason, message) {
   recommendedProfileId = profile.id;
   recommendedProfileReason = reason;
-  profileSelect.value = profile.id;
+  selectedProfileId = profile.id;
+  familySelect.value = getProfileFamilyId(profile);
   updateProfileGuide();
-  statusBox.innerHTML = message;
+  statusBox.innerHTML = formatRecommendationMessage(profile, message);
+}
+
+function resolveProfileForFamily(familyId, workbookData = [], fileName = "") {
+  if (!familyId) {
+    return null;
+  }
+
+  const familyProfiles = sortProfiles(getFamilyProfiles(familyId));
+  if (!familyProfiles.length) {
+    return null;
+  }
+
+  const structureRecommendation = recommendProfileByWorkbookStructure(workbookData);
+  if (
+    structureRecommendation?.profile &&
+    getProfileFamilyId(structureRecommendation.profile) === familyId
+  ) {
+    return structureRecommendation.profile;
+  }
+
+  const matchedByFileName = pickProfileByFileName(fileName, familyProfiles);
+  if (matchedByFileName) {
+    return matchedByFileName;
+  }
+
+  return getDefaultProfileForFamily(familyId);
 }
 
 function recommendProfileByFileName(fileName) {
-  const normalizedName = normalizeFileNameMatch(fileName);
-  let matched = null;
-  let matchedScore = -1;
-
-  PROFILES.forEach((profile) => {
-    (profile.filename_keywords || []).forEach((keyword) => {
-      const normalizedKeyword = normalizeFileNameMatch(keyword);
-      if (!normalizedKeyword || !normalizedName.includes(normalizedKeyword)) {
-        return;
-      }
-
-      const score = normalizedKeyword.length;
-      if (score > matchedScore) {
-        matched = profile;
-        matchedScore = score;
-      }
-    });
-  });
+  const matched = pickProfileByFileName(fileName, PROFILES);
 
   if (!matched) {
-    const fallback = PROFILES.find((profile) => profile.id === "generic_auto_header");
+    const fallback = getProfileById("generic_auto_header");
     if (fallback) {
       applyRecommendation(
         fallback,
         "filename",
-        `<strong>${fallback.label}</strong> 형식으로 추천했습니다.<br>파일명만으로 정확한 유형을 찾지 못해 범용 자동 인식 유형을 먼저 선택했습니다.`
+        `<strong>${PROFILE_FAMILIES.find((item) => item.id === getProfileFamilyId(fallback))?.label || fallback.label}</strong> 유형으로 추천했습니다.<br>파일명만으로 정확한 세부 형식을 찾지 못해 일반 명단 파일 묶음을 먼저 선택했습니다.`
       );
       return;
     }
@@ -429,7 +538,7 @@ function recommendProfileByFileName(fileName) {
     recommendedProfileId = "";
     recommendedProfileReason = "";
     updateProfileGuide();
-    statusBox.innerHTML = "파일을 선택했습니다. <strong>파일 유형</strong>을 확인한 뒤 <strong>변환 시작</strong>을 눌러 주세요.";
+    statusBox.innerHTML = "파일을 선택했습니다. <strong>상위 유형</strong>을 확인한 뒤 <strong>변환 시작</strong>을 눌러 주세요.";
     return;
   }
 
@@ -437,7 +546,7 @@ function recommendProfileByFileName(fileName) {
     applyRecommendation(
       matched,
       "filename",
-      `<strong>${matched.label}</strong> 형식으로 추천했습니다.<br>예시 파일명을 확인한 뒤, 아래 입력칸에 시트별 과정코드도 함께 넣어 주세요.`
+      `<strong>${PROFILE_FAMILIES.find((item) => item.id === getProfileFamilyId(matched))?.label || matched.label}</strong> 유형으로 추천했습니다.<br>예시 파일명을 확인한 뒤, 필요한 경우 아래 입력칸에 과정코드도 함께 넣어 주세요.`
     );
     return;
   }
@@ -445,7 +554,7 @@ function recommendProfileByFileName(fileName) {
   applyRecommendation(
     matched,
     "filename",
-    `<strong>${matched.label}</strong> 형식으로 추천했습니다.<br>예시 파일명과 설명이 맞는지만 한 번 확인해 주세요.`
+    `<strong>${PROFILE_FAMILIES.find((item) => item.id === getProfileFamilyId(matched))?.label || matched.label}</strong> 유형으로 추천했습니다.<br>예시 파일명과 설명이 맞는지만 한 번 확인해 주세요.`
   );
 }
 
@@ -637,6 +746,34 @@ function hasRequiredHeaderAliasData(rows, sourceConfig = {}) {
   });
 }
 
+function summarizeHeaderAliasData(rows, sourceConfig = {}) {
+  const headerInfo = findManualInputHeaderRowWithConfig(rows, sourceConfig);
+  const indexMap = getManualInputHeaderIndexMap(headerInfo.headerRow);
+  const requiredAny = sourceConfig.required_any || ["user_id", "name", "email", "mobile"];
+  const fieldAliases = sourceConfig.field_aliases || {};
+
+  let dataRowCount = 0;
+  let courseCodeValueCount = 0;
+
+  rows.slice(headerInfo.rowIndex + 1).forEach((rawRow) => {
+    const extracted = buildManualInputHeaderAliasRowData(rawRow || [], indexMap, fieldAliases);
+    const hasData = requiredAny.some((field) => hasFilledValue(extracted[field]));
+    if (!hasData) {
+      return;
+    }
+    dataRowCount += 1;
+    if (hasFilledValue(extracted.course_code)) {
+      courseCodeValueCount += 1;
+    }
+  });
+
+  return {
+    headerRowIndex: headerInfo.rowIndex,
+    dataRowCount,
+    courseCodeValueCount,
+  };
+}
+
 function getManualCourseCandidateSheets(profile, workbookData) {
   if (!profile?.manual_course_input?.required || !Array.isArray(workbookData)) {
     return [];
@@ -651,7 +788,7 @@ function getManualCourseCandidateSheets(profile, workbookData) {
   if (profile.id === "manual_fixed_sheet_course_codes") {
     return workbookData
       .filter((sheet) => selectedSheetNames.includes(sheet.name))
-      .filter((sheet) => checkManualFixedCourseSheet(sheet.rows || []))
+      .filter((sheet) => matchesStructurePattern("manual_fixed_course_sheet", sheet.rows || []))
       .filter((sheet) => hasManualFixedCourseData(sheet.rows || []))
       .map((sheet) => sheet.name);
   }
@@ -887,22 +1024,22 @@ function createWorkbookDownload(headers, rowMatrix) {
 function explainError(error) {
   const message = String(error?.message || error || "");
   if (message.includes("선택한 파일 유형과 업로드한 파일 구조가 다릅니다")) {
-    return "선택한 파일 유형이 현재 파일과 맞지 않습니다.\n파일 유형을 바꿔서 다시 시도해 주세요.";
+    return "선택한 상위 유형이 현재 파일과 맞지 않습니다.\n다른 상위 유형으로 바꿔서 다시 시도해 주세요.";
   }
   if (message.includes("시트별 과정코드를 직접 입력해야 합니다")) {
     return "이 유형은 시트별 과정코드를 함께 입력해야 합니다.\n예: `사무직 = HLAP21561`처럼 시트명과 과정코드를 한 줄씩 넣어 주세요.";
   }
   if (message.includes("헤더 행을 찾지 못했습니다")) {
-    return "선택한 파일 유형이 현재 파일과 맞지 않습니다.\n파일 유형을 바꿔서 다시 시도해 주세요.";
+    return "선택한 상위 유형이 현재 파일과 맞지 않습니다.\n다른 상위 유형으로 바꿔서 다시 시도해 주세요.";
   }
   if (message.includes("명단으로 보이는 데이터 행을 찾지 못했습니다")) {
-    return "표 안에서 실제 대상자 명단을 찾지 못했습니다.\n다른 파일 유형으로 바꾸거나 `8. 일반 명단 파일 자동 인식` 유형으로 다시 시도해 주세요.";
+    return "표 안에서 실제 대상자 명단을 찾지 못했습니다.\n다른 상위 유형으로 바꾸거나 `2. 일반 명단 파일` 유형으로 다시 시도해 주세요.";
   }
   if (message.includes("지원하지 않는 엑셀 형식")) {
     return "지원하는 확장자는 .xlsx, .xlsm, .xltx, .xltm, .xls 입니다.";
   }
-  if (message.includes("파일 유형을 먼저 선택")) {
-    return "파일 유형을 먼저 선택해 주세요.";
+  if (message.includes("파일 유형을 먼저 선택") || message.includes("상위 유형을 먼저 선택")) {
+    return "상위 유형을 먼저 선택해 주세요.";
   }
   return "변환 중 오류가 발생했습니다.\n원본 메시지: " + message;
 }
@@ -942,7 +1079,7 @@ function buildSuccessStatus(summary) {
 
 async function convertFile() {
   const file = fileInput.files?.[0];
-  const profile = getSelectedProfile();
+  const family = getSelectedFamily();
   clearDownload();
   errorBox.value = "";
   setSummary(null);
@@ -957,6 +1094,12 @@ async function convertFile() {
 
   try {
     const workbookData = await extractWorkbookData(file);
+    const profile = resolveProfileForFamily(family?.id, workbookData, file.name);
+    if (!profile) {
+      throw new Error("상위 유형을 먼저 선택해 주세요.");
+    }
+    selectedProfileId = profile.id;
+    updateProfileGuide();
     const manualCourseAssignments = resolveManualCourseAssignmentsForProfile(
       profile,
       workbookData,
@@ -989,20 +1132,40 @@ async function convertFile() {
   }
 }
 
-profileSelect.addEventListener("change", updateProfileGuide);
-fileInput.addEventListener("change", async () => {
-  const file = fileInput.files?.[0];
-  if (!file) {
-    recommendedProfileId = "";
-    recommendedProfileReason = "";
+familySelect.addEventListener("change", () => {
+  const family = getSelectedFamily();
+  if (!family) {
+    selectedProfileId = "";
     updateProfileGuide();
     return;
   }
 
-  statusBox.innerHTML = "<strong>파일을 확인 중입니다.</strong><br>파일명과 시트 구조를 함께 보고 가장 비슷한 유형을 찾고 있습니다.";
+  const resolved = resolveProfileForFamily(family.id, latestWorkbookData, latestInputFileName);
+  selectedProfileId = resolved?.id || getDefaultProfileForFamily(family.id)?.id || "";
+  updateProfileGuide();
+
+  if (fileInput.files?.[0] && getProfileFamilyId(recommendedProfileId) !== family.id) {
+    statusBox.innerHTML = `<strong>${family.label}</strong> 유형으로 변경했습니다.<br>변환할 때 현재 파일에 맞는 내부 세부 유형을 이 묶음 안에서 다시 자동 선택합니다.`;
+  }
+});
+fileInput.addEventListener("change", async () => {
+  const file = fileInput.files?.[0];
+  if (!file) {
+    latestWorkbookData = [];
+    latestInputFileName = "";
+    recommendedProfileId = "";
+    recommendedProfileReason = "";
+    selectedProfileId = getDefaultProfileForFamily(familySelect.value)?.id || "";
+    updateProfileGuide();
+    return;
+  }
+
+  latestInputFileName = file.name;
+  statusBox.innerHTML = "<strong>파일을 확인 중입니다.</strong><br>파일명과 시트 구조를 함께 보고 가장 비슷한 상위 유형과 내부 세부 유형을 찾고 있습니다.";
 
   try {
     const workbookData = await extractWorkbookData(file);
+    latestWorkbookData = workbookData;
     const structureRecommendation = recommendProfileByWorkbookStructure(workbookData);
     if (structureRecommendation) {
       applyRecommendation(
@@ -1013,6 +1176,7 @@ fileInput.addEventListener("change", async () => {
       return;
     }
   } catch (_error) {
+    latestWorkbookData = [];
     // Ignore recommendation-time parsing issues and fall back to filename only.
   }
 
@@ -1021,5 +1185,5 @@ fileInput.addEventListener("change", async () => {
 convertButton.addEventListener("click", convertFile);
 
 clearLegacyUsageData();
-renderProfiles();
+renderFamilies();
 refreshUsageView();

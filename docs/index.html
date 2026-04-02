@@ -553,7 +553,7 @@
     <section class="grid">
       <article class="card">
         <h2>파일 변환</h2>
-        <p>원본 파일을 올리면 가장 비슷한 유형을 추천합니다. 유형이 애매하면 `8. 일반 명단 파일 자동 인식`부터 시도해 보시면 됩니다.</p>
+        <p>원본 파일을 올리면 가장 비슷한 상위 유형을 추천하고, 내부 세부 유형은 자동으로 맞춥니다. 형식이 애매하면 `2. 일반 명단 파일`부터 시도해 보시면 됩니다.</p>
 
         <div class="field">
           <label for="fileInput">1. 원본 파일 올리기</label>
@@ -561,9 +561,9 @@
         </div>
 
         <div class="field">
-          <label for="profileSelect">2. 파일 유형 확인</label>
-          <select id="profileSelect"></select>
-          <div class="note">파일명을 보고 가장 비슷한 유형을 추천합니다. 추천이 다르면 직접 바꿔 주세요.</div>
+          <label for="familySelect">2. 상위 유형 확인</label>
+          <select id="familySelect"></select>
+          <div class="note">파일 구조와 파일명을 보고 상위 유형을 추천합니다. 내부 세부 유형은 변환 시 자동으로 맞추며, 필요하면 다른 상위 유형으로만 바꿔 주세요.</div>
         </div>
 
         <div class="field" id="manualCourseField" hidden>
@@ -576,13 +576,14 @@
 
         <div class="guide-box" id="profileGuide">
           <div class="guide-top">
-            <div class="guide-title" id="guideTitle">파일 유형을 선택해 주세요</div>
+            <div class="guide-title" id="guideTitle">상위 유형을 선택해 주세요</div>
             <div class="badge badge-neutral" id="recommendBadge">직접 선택</div>
           </div>
-          <div class="guide-copy" id="guideDescription">선택한 유형에 대한 설명이 여기에 표시됩니다.</div>
+          <div class="guide-copy" id="guideDescription">선택한 상위 유형 설명이 여기에 표시됩니다.</div>
           <div class="guide-meta">
             <div><strong>추천 상황</strong><span id="guideUseWhen">-</span></div>
             <div><strong>예시 파일명</strong><span id="guideExample">-</span></div>
+            <div><strong>내부 적용</strong><span id="guideVariant">-</span></div>
           </div>
           <ul class="hint-list" id="guideHints"></ul>
         </div>
