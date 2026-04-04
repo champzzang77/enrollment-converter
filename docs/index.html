@@ -196,6 +196,16 @@
       color: var(--muted);
     }
 
+    .header-link--download {
+      min-height: 42px;
+      padding: 0 16px;
+      background: linear-gradient(135deg, var(--accent) 0%, #5b4538 100%);
+      border-color: var(--accent);
+      color: #ffffff;
+      font-weight: 800;
+      box-shadow: 0 12px 28px rgba(52, 40, 33, 0.16);
+    }
+
     .main-content {
       padding-bottom: 44px;
     }
@@ -253,17 +263,26 @@
     }
 
     .hero-button {
-      min-height: 46px;
-      padding: 0 18px;
+      position: relative;
+      min-height: 54px;
+      padding: 0 22px;
       border-radius: 999px;
-      background: var(--accent);
+      border: 1px solid rgba(52, 40, 33, 0.16);
+      background: linear-gradient(135deg, var(--accent) 0%, #5d4739 100%);
       color: #ffffff;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      gap: 10px;
+      font-size: 15px;
       font-weight: 800;
-      box-shadow: 0 14px 30px rgba(52, 40, 33, 0.14);
+      box-shadow: 0 0 0 6px rgba(52, 40, 33, 0.08), 0 18px 36px rgba(52, 40, 33, 0.20);
+    }
+
+    .hero-button::after {
+      content: "→";
+      font-size: 16px;
+      line-height: 1;
     }
 
     .hero-note {
@@ -870,8 +889,13 @@
 
     @media (hover: hover) and (pointer: fine) {
       .header-link:hover,
-      .service-chip:hover {
+      .service-chip:hover,
+      .hero-button:hover {
         border-color: #d8cfc6;
+      }
+
+      .header-link--download:hover {
+        border-color: var(--accent);
       }
     }
 
@@ -923,6 +947,14 @@
           <span class="brand-copy">엑셀 업로드부터 LMS 등록 파일 다운로드까지 한 화면에서</span>
         </div>
         <div class="header-actions">
+          <a
+            class="header-link header-link--download"
+            href="downloads/standard-enrollment-template.xlsx"
+            download="표준 입과 신청서_권장 템플릿.xlsx"
+            aria-label="표준 입과 신청서 템플릿 다운로드"
+          >
+            표준 양식 받기
+          </a>
           <a class="header-link" href="#converter">변환</a>
           <a class="header-link" href="#usage">최근 사용</a>
           <a class="header-link" href="#security">보안</a>
