@@ -10,6 +10,16 @@ import { runProfile } from "./engine.mjs";
 const STORAGE_KEY = "enrollment-upload-static-usage-log-v2";
 const LEGACY_STORAGE_KEYS = ["enrollment-upload-static-usage-log-v1"];
 const ALLOWED_EXTENSIONS = new Set([".xlsx", ".xlsm", ".xltx", ".xltm", ".xls"]);
+const MANUAL_COURSE_FILE_EXTENSIONS = new Set([
+  ".txt",
+  ".csv",
+  ".tsv",
+  ".xlsx",
+  ".xlsm",
+  ".xltx",
+  ".xltm",
+  ".xls",
+]);
 
 const familySelect = document.getElementById("familySelect");
 const fileInput = document.getElementById("fileInput");
@@ -31,6 +41,9 @@ const manualCourseField = document.getElementById("manualCourseField");
 const manualCourseLabel = document.getElementById("manualCourseLabel");
 const manualCourseInput = document.getElementById("manualCourseInput");
 const manualCourseNote = document.getElementById("manualCourseNote");
+const manualCoursePathInput = document.getElementById("manualCoursePathInput");
+const manualCourseFileInput = document.getElementById("manualCourseFileInput");
+const manualCourseSourceNote = document.getElementById("manualCourseSourceNote");
 const recentUsageBox = document.getElementById("recentUsageBox");
 const totalUsageCount = document.getElementById("totalUsageCount");
 const todayUsageCount = document.getElementById("todayUsageCount");
@@ -161,9 +174,16 @@ function updateProfileGuide() {
   const manualCourseConfig = profile?.manual_course_input;
   if (manualCourseConfig) {
     manualCourseField.hidden = false;
-    manualCourseLabel.textContent = manualCourseConfig.label || "선택 입력. 시트별 과정코드 직접 입력";
-    manualCourseNote.textContent = manualCourseConfig.note || "과정코드를 따로 받은 경우에만 입력해 주세요.";
+    manualCourseLabel.textContent = manualCourseConfig.label || "선택 입력. 과정코드 입력 방식";
+    manualCourseNote.textContent =
+      manualCourseConfig.note ||
+      "과정코드를 따로 받은 경우에만 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나를 사용해 주세요.";
     manualCourseInput.placeholder = manualCourseConfig.placeholder || "";
+    manualCoursePathInput.placeholder =
+      manualCourseConfig.path_placeholder || "/Users/parkchamin/Downloads/과정코드 첨부파일.xlsx";
+    manualCourseSourceNote.textContent =
+      manualCourseConfig.source_note ||
+      "이 영역은 `과정코드 직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나로 사용할 수 있습니다. 경로 읽기는 로컬 오프라인 앱이나 파일 접근이 허용된 브라우저에서만 동작할 수 있고, 막히면 바로 아래 파일 선택을 사용해 주세요. 화면에 직접 적은 내용이 있으면 그 값을 우선 적용합니다.";
   } else {
     manualCourseField.hidden = true;
   }
@@ -399,16 +419,23 @@ function evaluateStructureRecommendation(profile, workbookData) {
     return null;
   }
 
-  if (config.mode === "header_alias_sheet") {
-    if (config.single_sheet_only && workbookData.length !== 1) {
-      return null;
-    }
+  if (config.single_sheet_only && workbookData.length !== 1) {
+    return null;
+  }
 
+  if (config.multi_sheet_only && workbookData.length < 2) {
+    return null;
+  }
+
+  if (config.mode === "header_alias_sheet") {
     const sourceConfig = profile.source || {};
     const matchedSheets = workbookData.filter((sheet) => {
       try {
         const summary = summarizeHeaderAliasData(sheet.rows || [], sourceConfig);
         if (summary.dataRowCount <= 0) {
+          return false;
+        }
+        if (config.require_course_code && summary.courseCodeValueCount <= 0) {
           return false;
         }
         if (config.require_missing_course_code && summary.courseCodeValueCount > 0) {
@@ -578,8 +605,153 @@ function normalizeSheetNameKey(value) {
   return normalizeFileNameMatch(value).replace(/[()_\-]/g, "");
 }
 
+function normalizeManualCoursePathToUrl(rawPath) {
+  const value = String(rawPath || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  if (value.startsWith("file://")) {
+    return value;
+  }
+
+  if (value.startsWith("/")) {
+    return encodeURI(`file://${value}`);
+  }
+
+  if (value.startsWith("./") || value.startsWith("../")) {
+    return new URL(value, window.location.href).href;
+  }
+
+  throw new Error("과정코드 첨부파일 경로는 `/Users/...` 또는 `file:///...` 형태로 넣어 주세요.");
+}
+
 function hasFilledValue(value) {
   return String(value ?? "").trim() !== "";
+}
+
+function ensureSupportedManualCourseFileName(fileName) {
+  const extension = getFileExtension(fileName);
+  if (!MANUAL_COURSE_FILE_EXTENSIONS.has(extension)) {
+    throw new Error("지원하지 않는 과정코드 첨부파일 형식입니다.");
+  }
+  return extension;
+}
+
+function extractManualCourseLinesFromWorkbook(workbook) {
+  const lines = [];
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const rows = buildSheetRowsPreservingLayout(workbook.Sheets[sheetName]);
+    rows.forEach((row) => {
+      const values = (row || []).map((cell) => String(cell ?? "").trim()).filter(Boolean);
+      if (!values.length) {
+        return;
+      }
+
+      const codeCell = values.find((value) => /\bHL[A-Za-z0-9]+\b/i.test(value)) || "";
+      const labelParts = values.filter((value) => value !== codeCell);
+
+      if (codeCell && labelParts.length) {
+        lines.push(labelParts.join(" "));
+        lines.push(codeCell);
+        return;
+      }
+
+      lines.push(...values);
+    });
+  });
+
+  return lines.join("\n").trim();
+}
+
+async function readTextFromFile(file) {
+  if (typeof file.text === "function") {
+    return file.text();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("첨부파일을 읽는 중 오류가 발생했습니다."));
+    reader.readAsText(file);
+  });
+}
+
+async function readArrayBufferFromUrl(url) {
+  const response = await fetch(url);
+  return response.arrayBuffer();
+}
+
+async function readTextFromUrl(url) {
+  const response = await fetch(url);
+  return response.text();
+}
+
+async function readManualCourseAttachmentFromFile(file) {
+  if (!file) {
+    return "";
+  }
+
+  const extension = ensureSupportedManualCourseFileName(file.name);
+  if (extension === ".txt" || extension === ".csv" || extension === ".tsv") {
+    return String(await readTextFromFile(file)).trim();
+  }
+
+  const data = await readFileAsArrayBuffer(file);
+  const workbook = XLSX.read(data, {
+    type: "array",
+    cellDates: false,
+    cellText: false,
+  });
+  return extractManualCourseLinesFromWorkbook(workbook);
+}
+
+async function readManualCourseAttachmentFromPath(rawPath) {
+  const value = String(rawPath || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  const extension = ensureSupportedManualCourseFileName(value);
+  const url = normalizeManualCoursePathToUrl(value);
+
+  try {
+    if (extension === ".txt" || extension === ".csv" || extension === ".tsv") {
+      return String(await readTextFromUrl(url)).trim();
+    }
+
+    const data = await readArrayBufferFromUrl(url);
+    const workbook = XLSX.read(data, {
+      type: "array",
+      cellDates: false,
+      cellText: false,
+    });
+    return extractManualCourseLinesFromWorkbook(workbook);
+  } catch (error) {
+    throw new Error(`과정코드 첨부파일 경로를 읽지 못했습니다. ${error?.message || error}`);
+  }
+}
+
+async function buildManualCourseSourceText(rawText, rawPath, attachmentFile) {
+  const parts = [];
+
+  const pathText = await readManualCourseAttachmentFromPath(rawPath);
+  if (pathText) {
+    parts.push(pathText);
+  }
+
+  const fileText = await readManualCourseAttachmentFromFile(attachmentFile);
+  if (fileText) {
+    parts.push(fileText);
+  }
+
+  const typedText = String(rawText || "").trim();
+  if (typedText) {
+    parts.push(typedText);
+  }
+
+  return parts.join("\n").trim();
 }
 
 function parseManualCourseAssignments(rawText, knownSheetNames = []) {
@@ -623,6 +795,20 @@ function parseManualCourseAssignments(rawText, knownSheetNames = []) {
         sheetCourseCodes[matchedSheetName] = code;
       } else {
         orderedEntries.push({ name: left, code });
+      }
+      pendingName = "";
+      return;
+    }
+
+    const trailingParenCodeMatch = normalizedLine.match(/^(.*)\s*[\(\[（]\s*(HL[A-Za-z0-9]+)\s*[\)\]）]\s*$/i);
+    if (trailingParenCodeMatch) {
+      const left = trailingParenCodeMatch[1].trim();
+      const code = trailingParenCodeMatch[2].toUpperCase();
+      const matchedSheetName = sheetsByNormalizedName.get(normalizeSheetNameKey(left));
+      if (matchedSheetName) {
+        sheetCourseCodes[matchedSheetName] = code;
+      } else {
+        orderedEntries.push({ name: left || null, code });
       }
       pendingName = "";
       return;
@@ -710,19 +896,73 @@ function getManualInputHeaderIndexMap(headerRow) {
   return Object.fromEntries(entries);
 }
 
+function scoreManualInputAliasMatch(headerKey, aliasKey) {
+  if (!headerKey || !aliasKey || !headerKey.includes(aliasKey)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  if (
+    aliasKey === "주소" &&
+    (headerKey.includes("이메일") || headerKey.includes("메일"))
+  ) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  let score = aliasKey.length * 10;
+  if (headerKey === aliasKey) {
+    score += 1000;
+  } else {
+    if (headerKey.startsWith(aliasKey)) {
+      score += 300;
+    }
+    if (headerKey.endsWith(aliasKey)) {
+      score += 200;
+    }
+  }
+
+  score -= Math.max(0, headerKey.length - aliasKey.length);
+  return score;
+}
+
 function pickManualInputValueByAliases(row, indexMap, aliases = []) {
+  let bestValue = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
   for (const alias of aliases) {
     const aliasKey = normalizeHeaderText(alias);
     for (const [headerKey, index] of Object.entries(indexMap)) {
-      if (headerKey.includes(aliasKey) && index < row.length) {
-        const value = row[index];
-        if (hasFilledValue(value)) {
-          return value;
-        }
+      if (index >= row.length) {
+        continue;
+      }
+
+      const value = row[index];
+      const score = scoreManualInputAliasMatch(headerKey, aliasKey) + (hasFilledValue(value) ? 1 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestValue = value;
       }
     }
   }
-  return null;
+
+  return hasFilledValue(bestValue) ? bestValue : null;
+}
+
+function pickManualInputIndexByAliases(indexMap, aliases = []) {
+  let bestIndex = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const alias of aliases) {
+    const aliasKey = normalizeHeaderText(alias);
+    for (const [headerKey, index] of Object.entries(indexMap)) {
+      const score = scoreManualInputAliasMatch(headerKey, aliasKey);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+  }
+
+  return bestIndex;
 }
 
 function buildManualInputHeaderAliasRowData(rawRow, indexMap, fieldAliases = {}) {
@@ -809,28 +1049,153 @@ function getManualCourseCandidateSheets(profile, workbookData) {
   return selectedSheetNames;
 }
 
+function getManualCourseCandidateGroups(profile, workbookData) {
+  if (!profile?.manual_course_input?.required || !Array.isArray(workbookData)) {
+    return {};
+  }
+
+  const sourceConfig = profile.source || {};
+  const groupAliases = Array.isArray(sourceConfig.manual_course_group_aliases)
+    ? sourceConfig.manual_course_group_aliases
+    : [];
+  if (!groupAliases.length || sourceConfig.mode !== "header_alias") {
+    return {};
+  }
+
+  const requiredAny = sourceConfig.required_any || ["user_id", "name", "email", "mobile"];
+  const fieldAliases = sourceConfig.field_aliases || {};
+  const selectedSheetNames = chooseProfileSheetNames(
+    workbookData.map((sheet) => sheet.name),
+    sourceConfig
+  );
+
+  return Object.fromEntries(
+    workbookData
+      .filter((sheet) => selectedSheetNames.includes(sheet.name))
+      .map((sheet) => {
+        try {
+          const headerInfo = findManualInputHeaderRowWithConfig(sheet.rows || [], sourceConfig);
+          const indexMap = getManualInputHeaderIndexMap(headerInfo.headerRow);
+          const groupColumnIndex = pickManualInputIndexByAliases(indexMap, groupAliases);
+          if (groupColumnIndex === null || groupColumnIndex === undefined) {
+            return [sheet.name, []];
+          }
+
+          const seen = new Set();
+          const groups = [];
+          (sheet.rows || []).slice(headerInfo.rowIndex + 1).forEach((rawRow) => {
+            const extracted = buildManualInputHeaderAliasRowData(rawRow || [], indexMap, fieldAliases);
+            const hasData = requiredAny.some((field) => hasFilledValue(extracted[field]));
+            if (!hasData) {
+              return;
+            }
+
+            const groupValue = rawRow[groupColumnIndex];
+            if (!hasFilledValue(groupValue)) {
+              return;
+            }
+
+            const groupName = String(groupValue).trim();
+            const groupKey = normalizeSheetNameKey(groupName);
+            if (!groupKey || seen.has(groupKey)) {
+              return;
+            }
+
+            seen.add(groupKey);
+            groups.push(groupName);
+          });
+
+          return [sheet.name, groups];
+        } catch (_error) {
+          return [sheet.name, []];
+        }
+      })
+      .filter(([, groups]) => groups.length > 0)
+  );
+}
+
 function resolveManualCourseAssignmentsForProfile(profile, workbookData, rawText) {
   const allSheetNames = Array.isArray(workbookData) ? workbookData.map((sheet) => sheet.name) : [];
   const parsedAssignments = parseManualCourseAssignments(rawText, allSheetNames);
   const candidateSheetNames = getManualCourseCandidateSheets(profile, workbookData);
+  const candidateGroupsBySheet = getManualCourseCandidateGroups(profile, workbookData);
   const runtimeSheetCourseCodes = { ...parsedAssignments.sheetCourseCodes };
-  const orderedTargetSheetNames = (candidateSheetNames.length ? candidateSheetNames : allSheetNames)
-    .filter((sheetName) => !runtimeSheetCourseCodes[sheetName]);
+  const runtimeGroupCourseCodes = {};
+  const remainingEntries = [];
 
-  if (parsedAssignments.orderedEntries.length === 1 && orderedTargetSheetNames.length === 1) {
-    runtimeSheetCourseCodes[orderedTargetSheetNames[0]] = parsedAssignments.orderedEntries[0].code;
-  } else if (parsedAssignments.orderedEntries.length > 1) {
-    parsedAssignments.orderedEntries.forEach((entry, index) => {
-      const sheetName = orderedTargetSheetNames[index];
-      if (sheetName) {
-        runtimeSheetCourseCodes[sheetName] = entry.code;
-      }
+  parsedAssignments.orderedEntries.forEach((entry) => {
+    if (!entry.name) {
+      remainingEntries.push(entry);
+      return;
+    }
+
+    const matchedTargets = [];
+    Object.entries(candidateGroupsBySheet).forEach(([sheetName, groupNames]) => {
+      groupNames.forEach((groupName) => {
+        if (normalizeSheetNameKey(groupName) === normalizeSheetNameKey(entry.name)) {
+          matchedTargets.push({ sheetName, groupName });
+        }
+      });
     });
+
+    if (matchedTargets.length === 1) {
+      const target = matchedTargets[0];
+      runtimeGroupCourseCodes[target.sheetName] = {
+        ...(runtimeGroupCourseCodes[target.sheetName] || {}),
+        [target.groupName]: entry.code,
+      };
+      return;
+    }
+
+    remainingEntries.push(entry);
+  });
+
+  const unmatchedGroupTargets = Object.entries(candidateGroupsBySheet).flatMap(([sheetName, groupNames]) =>
+    groupNames
+      .filter((groupName) => !runtimeGroupCourseCodes[sheetName]?.[groupName])
+      .map((groupName) => ({ sheetName, groupName }))
+  );
+  const hasSingleGroupedSheet = Object.keys(candidateGroupsBySheet).length === 1;
+  const canAssignRemainingEntriesToGroupsInOrder =
+    remainingEntries.length > 0 &&
+    unmatchedGroupTargets.length === remainingEntries.length &&
+    (
+      remainingEntries.every((entry) => !entry.name) ||
+      hasSingleGroupedSheet
+    );
+
+  if (canAssignRemainingEntriesToGroupsInOrder) {
+    remainingEntries.forEach((entry, index) => {
+      const target = unmatchedGroupTargets[index];
+      if (!target) {
+        return;
+      }
+      runtimeGroupCourseCodes[target.sheetName] = {
+        ...(runtimeGroupCourseCodes[target.sheetName] || {}),
+        [target.groupName]: entry.code,
+      };
+    });
+    remainingEntries.length = 0;
+  } else {
+    const orderedTargetSheetNames = (candidateSheetNames.length ? candidateSheetNames : allSheetNames)
+      .filter((sheetName) => !runtimeSheetCourseCodes[sheetName]);
+
+    if (remainingEntries.length === 1 && orderedTargetSheetNames.length === 1) {
+      runtimeSheetCourseCodes[orderedTargetSheetNames[0]] = remainingEntries[0].code;
+    } else if (remainingEntries.length > 1) {
+      remainingEntries.forEach((entry, index) => {
+        const sheetName = orderedTargetSheetNames[index];
+        if (sheetName) {
+          runtimeSheetCourseCodes[sheetName] = entry.code;
+        }
+      });
+    }
   }
 
   return {
     sheetCourseCodes: runtimeSheetCourseCodes,
-    orderedEntries: parsedAssignments.orderedEntries,
+    groupCourseCodes: runtimeGroupCourseCodes,
+    orderedEntries: remainingEntries,
     candidateSheetNames,
   };
 }
@@ -1029,6 +1394,15 @@ function explainError(error) {
   if (message.includes("시트별 과정코드를 직접 입력해야 합니다")) {
     return "이 유형은 시트별 과정코드를 함께 입력해야 합니다.\n예: `사무직 = HLAP21561`처럼 시트명과 과정코드를 한 줄씩 넣어 주세요.";
   }
+  if (message.includes("구분값별 과정코드를 직접 입력해야 합니다")) {
+    return "이 파일은 한 장 안에서 직종/구분별로 과정코드를 나눠 넣어야 합니다.\n예: `사무직 = HLAP21561`와 `비사무직 = HLAP21547`처럼 한 줄씩 입력해 주세요.";
+  }
+  if (message.includes("과정코드 첨부파일 경로를 읽지 못했습니다")) {
+    return "과정코드 첨부파일 경로를 읽지 못했습니다.\n일반 브라우저 보안으로 막힌 경우가 많으니, 같은 파일을 아래 첨부파일 선택으로 넣어 주세요.";
+  }
+  if (message.includes("지원하지 않는 과정코드 첨부파일 형식")) {
+    return "과정코드 첨부파일은 .txt, .csv, .tsv, .xlsx, .xlsm, .xltx, .xltm, .xls 형식만 읽을 수 있습니다.";
+  }
   if (message.includes("헤더 행을 찾지 못했습니다")) {
     return "선택한 상위 유형이 현재 파일과 맞지 않습니다.\n다른 상위 유형으로 바꿔서 다시 시도해 주세요.";
   }
@@ -1100,14 +1474,22 @@ async function convertFile() {
     }
     selectedProfileId = profile.id;
     updateProfileGuide();
+    const manualCourseSourceText = profile.manual_course_input?.required
+      ? await buildManualCourseSourceText(
+          manualCourseInput.value,
+          manualCoursePathInput.value,
+          manualCourseFileInput.files?.[0] || null
+        )
+      : "";
     const manualCourseAssignments = resolveManualCourseAssignmentsForProfile(
       profile,
       workbookData,
-      manualCourseInput.value
+      manualCourseSourceText
     );
 
     const result = runProfile(profile, workbookData, file.name, {
       manual_sheet_course_codes: manualCourseAssignments.sheetCourseCodes,
+      manual_group_course_codes: manualCourseAssignments.groupCourseCodes,
     });
     if (!result.summary?.total_rows) {
       throw new Error("명단으로 보이는 데이터 행을 찾지 못했습니다.");

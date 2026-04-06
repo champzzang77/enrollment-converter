@@ -549,6 +549,11 @@
       margin-top: 14px;
     }
 
+    .field-stack {
+      display: grid;
+      gap: 10px;
+    }
+
     button,
     .download-link {
       min-height: 50px;
@@ -1021,9 +1026,20 @@
         </div>
 
         <div class="field" id="manualCourseField" hidden>
-          <label for="manualCourseInput" id="manualCourseLabel">선택 입력. 시트별 과정코드 직접 입력</label>
+          <label for="manualCourseInput" id="manualCourseLabel">선택 입력. 과정코드 입력 방식</label>
           <textarea id="manualCourseInput" placeholder=""></textarea>
-          <div class="note" id="manualCourseNote">과정코드를 따로 받은 경우에만 입력해 주세요.</div>
+          <div class="note" id="manualCourseNote">과정코드를 따로 받은 경우에만 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나를 사용해 주세요.</div>
+          <div class="field-stack">
+            <div>
+              <label for="manualCoursePathInput">선택 입력. 과정코드 첨부파일 경로</label>
+              <input id="manualCoursePathInput" type="text" placeholder="/Users/parkchamin/Downloads/과정코드 첨부파일.xlsx">
+            </div>
+            <div>
+              <label for="manualCourseFileInput">선택 입력. 과정코드 첨부파일 선택</label>
+              <input id="manualCourseFileInput" type="file" accept=".txt,.csv,.tsv,.xlsx,.xlsm,.xltx,.xltm,.xls">
+            </div>
+          </div>
+          <div class="note" id="manualCourseSourceNote">이 영역은 `과정코드 직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나로 사용할 수 있습니다. 경로 읽기는 로컬 오프라인 앱이나 파일 접근이 허용된 브라우저에서만 동작할 수 있고, 막히면 바로 아래 파일 선택을 사용해 주세요. 화면에 직접 적은 내용이 있으면 그 값을 우선 적용합니다.</div>
         </div>
 
         <div class="guide-box" id="profileGuide">
@@ -1115,7 +1131,7 @@
           </li>
           <li>
             <strong>3. 필요 시 과정코드 입력</strong>
-            <span>파일 밖에서 받은 과정코드가 있을 때만 시트별 또는 구분값별로 직접 입력합니다.</span>
+            <span>파일 밖에서 받은 과정코드가 있을 때만 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나로 넣습니다.</span>
           </li>
           <li>
             <strong>4. 변환 후 결과 다운로드</strong>

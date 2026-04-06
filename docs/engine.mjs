@@ -83,6 +83,19 @@ function normalizeRuntimeSheetMap(sheetMap = {}) {
   );
 }
 
+function normalizeRuntimeGroupCodeMap(groupMap = {}) {
+  return Object.fromEntries(
+    Object.entries(groupMap).map(([sheetName, groupCodes]) => [
+      String(sheetName),
+      Object.fromEntries(
+        Object.entries(groupCodes || {})
+          .map(([groupName, code]) => [normalizeMatchKey(groupName), text(code)])
+          .filter(([, code]) => code)
+      ),
+    ])
+  );
+}
+
 function normalizeColumnRefs(columnRef) {
   if (Array.isArray(columnRef)) {
     return columnRef.map((item) => columnRefToIndex(item));
@@ -513,16 +526,73 @@ function getHeaderIndexMap(headerRow) {
   return Object.fromEntries(entries);
 }
 
+function scoreAliasMatch(headerKey, aliasKey) {
+  if (!headerKey || !aliasKey || !headerKey.includes(aliasKey)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  if (
+    aliasKey === "주소" &&
+    (headerKey.includes("이메일") || headerKey.includes("메일"))
+  ) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  let score = aliasKey.length * 10;
+  if (headerKey === aliasKey) {
+    score += 1000;
+  } else {
+    if (headerKey.startsWith(aliasKey)) {
+      score += 300;
+    }
+    if (headerKey.endsWith(aliasKey)) {
+      score += 200;
+    }
+  }
+
+  score -= Math.max(0, headerKey.length - aliasKey.length);
+  return score;
+}
+
 function pickByAliases(row, indexMap, aliases) {
+  let bestValue = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
   for (const alias of aliases) {
     const aliasKey = normalizeHeader(alias);
     for (const [headerKey, index] of Object.entries(indexMap)) {
-      if (headerKey.includes(aliasKey) && index < row.length) {
-        return text(row[index]);
+      if (index >= row.length) {
+        continue;
+      }
+
+      const value = text(row[index]);
+      const score = scoreAliasMatch(headerKey, aliasKey) + (value ? 1 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestValue = value;
       }
     }
   }
-  return null;
+
+  return bestValue;
+}
+
+function pickHeaderIndexByAliases(indexMap, aliases = []) {
+  let bestIndex = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const alias of aliases) {
+    const aliasKey = normalizeHeader(alias);
+    for (const [headerKey, index] of Object.entries(indexMap)) {
+      const score = scoreAliasMatch(headerKey, aliasKey);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+  }
+
+  return bestIndex;
 }
 
 function buildHeaderAliasRowData(rawRow, indexMap, fieldAliases = {}) {
@@ -779,6 +849,7 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
   const sheetContextLabels = sourceConfig.sheet_context_labels || {};
   const selectedSheets = chooseSheetNames(sheetNames, sourceConfig);
   const manualSheetCourseCodes = normalizeRuntimeSheetMap(runtimeOptions.manual_sheet_course_codes || {});
+  const manualGroupCourseCodes = normalizeRuntimeGroupCodeMap(runtimeOptions.manual_group_course_codes || {});
   if (!selectedSheets.length) {
     throw new Error("선택한 파일 유형과 업로드한 파일 구조가 다릅니다. 필요한 시트를 찾지 못했습니다.");
   }
@@ -806,6 +877,14 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
 
     const { rowIndex: headerRowIndex, headerRow } = headerInfo;
     const indexMap = getHeaderIndexMap(headerRow);
+    const groupAliases = Array.isArray(sourceConfig.manual_course_group_aliases)
+      ? sourceConfig.manual_course_group_aliases
+      : [];
+    const groupCourseLookup = manualGroupCourseCodes[sheetName] || {};
+    const hasGroupCourseCodes = Object.keys(groupCourseLookup).length > 0;
+    const groupColumnIndex = hasGroupCourseCodes && groupAliases.length
+      ? pickHeaderIndexByAliases(indexMap, groupAliases)
+      : null;
     const hasDataRows = rawRows.slice(headerRowIndex + 1).some((rawRow) =>
       hasRequiredValue(buildHeaderAliasRowData(rawRow, indexMap, fieldAliases), requiredAny)
     );
@@ -822,7 +901,17 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
       continue;
     }
 
-    if (sourceConfig.require_manual_course_codes && !manualSheetCourseCodes[sheetName]) {
+    if (hasGroupCourseCodes && groupColumnIndex === null && !manualSheetCourseCodes[sheetName]) {
+      throw new Error(
+        `선택한 파일 유형과 업로드한 파일 구조가 다릅니다. ${sheetName} 시트에서 구분 열을 찾지 못했습니다.`
+      );
+    }
+
+    if (
+      sourceConfig.require_manual_course_codes &&
+      !manualSheetCourseCodes[sheetName] &&
+      !hasGroupCourseCodes
+    ) {
       missingManualCourseSheets.push(sheetName);
       continue;
     }
@@ -848,6 +937,8 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
     let rowCount = 0;
     let emailUndefined = 0;
     let mobileUndefined = 0;
+    const appliedCourseCodes = new Set();
+    const missingManualCourseGroups = new Set();
 
     for (const rawRow of rawRows.slice(headerRowIndex + 1)) {
       const extracted = buildHeaderAliasRowData(rawRow, indexMap, fieldAliases);
@@ -857,11 +948,27 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
       }
 
       let rowData = applyDefaults(extracted, sheetContext);
+      const groupValue = groupColumnIndex === null || groupColumnIndex === undefined
+        ? null
+        : text(groupColumnIndex < rawRow.length ? rawRow[groupColumnIndex] : null);
+      const groupCode = hasGroupCourseCodes
+        ? groupCourseLookup[normalizeMatchKey(groupValue)] || null
+        : null;
+      if (!text(rowData.course_code) && groupCode) {
+        rowData.course_code = groupCode;
+      }
       rowData = applyDefaults(rowData, perSheetDefaults);
+      if (sourceConfig.require_manual_course_codes && !text(rowData.course_code)) {
+        missingManualCourseGroups.add(groupValue || "(빈 값)");
+        continue;
+      }
       const uploadRow = finalizeRow(rowData, copyIfMissing, undefinedIfMissing);
       rows.push(uploadRow);
       sourcePersonCount += 1;
       rowCount += 1;
+      if (text(uploadRow.course_code)) {
+        appliedCourseCodes.add(uploadRow.course_code);
+      }
 
       if (uploadRow.email === "undefined") {
         emailUndefined += 1;
@@ -874,12 +981,20 @@ function buildRowsHeaderAlias(profile, workbookData, runtimeOptions = {}) {
     sheetStats.push({
       sheet_name: sheetName,
       header_row: headerRowIndex + 1,
-      course_codes: manualSheetCourseCodes[sheetName] ? [manualSheetCourseCodes[sheetName]] : [],
+      course_codes: appliedCourseCodes.size
+        ? [...appliedCourseCodes]
+        : (manualSheetCourseCodes[sheetName] ? [manualSheetCourseCodes[sheetName]] : []),
       source_person_count: sourcePersonCount,
       row_count: rowCount,
       email_undefined: emailUndefined,
       mobile_undefined: mobileUndefined,
     });
+
+    if (missingManualCourseGroups.size) {
+      throw new Error(
+        `선택한 파일 유형은 구분값별 과정코드를 직접 입력해야 합니다.\n${sheetName} 시트 누락 구분: ${[...missingManualCourseGroups].join(", ")}`
+      );
+    }
   }
 
   if (missingManualCourseSheets.length) {

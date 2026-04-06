@@ -131,7 +131,8 @@ export const PROFILE_FAMILIES = [
     use_when: "과정명은 보이거나 시트별 명단은 있는데, 과정코드만 파일 밖에서 따로 받았을 때",
     example_file: "26년 상반기 정기교육명단(입과용).xlsx",
     hints: [
-      "시트별로 붙여넣거나, 실제 명단 시트 순서대로 과정코드를 입력할 수 있습니다.",
+      "과정코드는 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나로 넣을 수 있습니다.",
+      "시트별로 붙여넣거나, 실제 명단 시트 순서대로 과정코드를 연결할 수 있습니다.",
       "한 장짜리 추가 명단표처럼 과정코드 한 줄만 넣으면 되는 형식도 포함됩니다.",
       "파일을 올리면 내부 세부 유형을 자동으로 골라 입력칸 안내를 맞춰 줍니다.",
     ],
@@ -366,7 +367,7 @@ export const PROFILES = [
           when_regex: "^\\d+$",
         },
       },
-      required_any: ["course_code", "name", "user_id"],
+      required_any: ["name", "user_id"],
       layout_validation: {
         header_row: 18,
         column_checks: [
@@ -409,8 +410,6 @@ export const PROFILES = [
     ],
     filename_keywords: [
       "사이버교육 단체입과 신청양식",
-      "단체입과",
-      "신청양식",
       "대전성모병원",
       "대전성모",
     ],
@@ -808,8 +807,8 @@ export const PROFILES = [
     undefined_if_missing: ["email", "mobile"],
     manual_course_input: {
       required: true,
-      label: "선택 입력. 시트별 과정코드 직접 입력",
-      note: "이 유형은 과정코드를 파일 밖에서 따로 받은 경우에 씁니다. `사무직 = HLAP21561`처럼 시트명 기준으로 적거나, 과정명과 과정코드를 두 줄씩 붙여넣어도 됩니다.",
+      label: "선택 입력. 과정코드 입력 방식",
+      note: "이 유형은 과정코드를 파일 밖에서 따로 받은 경우에 씁니다. 아래에서 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나를 사용해 주세요. 직접 입력할 때는 `사무직 = HLAP21561`처럼 시트명 기준으로 적거나, 과정명과 과정코드를 두 줄씩 붙여넣어도 됩니다.",
       placeholder: "사무직 = HLAP21561\n비사무직 = HLAP21547\n\n또는\n2026 안전보건교육 상반기(사무 및 판매근로자_보건업)_무재해\nㄴ 과정코드 : HLAP21561\n2026 안전보건교육 상반기(현장근로자_보건업)_무재해\nㄴ 과정코드 : HLAP21547",
     },
     assumptions: [
@@ -819,6 +818,7 @@ export const PROFILES = [
     ],
     structure_recommendation: {
       pattern_id: "manual_course_sheet",
+      multi_sheet_only: true,
       min_match_mode: "up_to_two",
       min_matches: 2,
       priority: 60,
@@ -859,8 +859,8 @@ export const PROFILES = [
     undefined_if_missing: ["email", "mobile"],
     manual_course_input: {
       required: true,
-      label: "선택 입력. 시트별 과정코드 직접 입력",
-      note: "이 유형은 과정코드를 파일 밖에서 따로 받은 경우에 씁니다. `1. 4주기_의료인증제필수교육 = HLAP00000`처럼 시트명 기준으로 적는 방법이 가장 정확하고, 시트명을 빼도 실제 명단 시트 순서대로 자동 연결합니다.",
+      label: "선택 입력. 과정코드 입력 방식",
+      note: "이 유형은 과정코드를 파일 밖에서 따로 받은 경우에 씁니다. 아래에서 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나를 사용해 주세요. 직접 입력할 때는 `1. 4주기_의료인증제필수교육 = HLAP00000`처럼 시트명 기준으로 적는 방법이 가장 정확하고, 시트명을 빼도 실제 명단 시트 순서대로 자동 연결합니다.",
       placeholder: "1. 4주기_의료인증제필수교육 = HLAP00000\n2. 법정의무교육 = HLAP00001\n3. (자체)심폐소생술 = HLAP00002",
     },
     assumptions: [
@@ -871,6 +871,7 @@ export const PROFILES = [
     ],
     structure_recommendation: {
       pattern_id: "manual_fixed_course_sheet",
+      multi_sheet_only: true,
       min_matches: 2,
       priority: 50,
       message_detail: "여러 시트에서 단체 입과 신청양식 구조가 확인되었습니다. 과정코드를 따로 받은 경우 아래 입력칸에 시트별로 넣어 주세요.",
@@ -989,6 +990,7 @@ export const PROFILES = [
     filename_keywords: [
       "의료원 입과신청서",
       "의료원 입과 신청서",
+      "20260401_의료원 입과신청서",
       "의료원 입과신청서 재전송",
       "입과신청서 재전송",
       "20260320_의료원",
@@ -1009,6 +1011,7 @@ export const PROFILES = [
     ],
     structure_recommendation: {
       pattern_id: "completed_application_sheet",
+      multi_sheet_only: true,
       min_match_mode: "up_to_two",
       min_matches: 2,
       priority: 70,
@@ -1017,7 +1020,7 @@ export const PROFILES = [
     source: {
       mode: "fixed_columns",
       start_row: 19,
-      required_any: ["course_code", "name", "user_id"],
+      required_any: ["name", "user_id"],
       layout_validation: {
         header_row: 18,
         column_checks: [
@@ -1077,11 +1080,19 @@ export const PROFILES = [
       "A(ID)와 C(비밀번호)는 사번 또는 희망 ID 값을 사용합니다.",
       "이메일 또는 휴대폰이 비어 있으면 undefined로 채웁니다.",
     ],
+    structure_recommendation: {
+      mode: "header_alias_sheet",
+      single_sheet_only: true,
+      require_course_code: true,
+      min_matches: 1,
+      priority: 72,
+      message_detail: "한 장짜리 완성 명단 구조가 확인되어, 과정코드가 이미 들어 있는 입과 신청서로 판단했습니다.",
+    },
     source: {
       mode: "header_alias",
       first_sheet_only: true,
       header_keywords: ["과정코드", "이름", "휴대폰"],
-      required_any: ["course_code", "name", "user_id"],
+      required_any: ["name", "user_id"],
       field_aliases: {
         course_code: ["과정코드"],
         user_id: ["사번 또는 희망 id", "사번", "희망 id", "희망id", "id"],
@@ -1119,8 +1130,8 @@ export const PROFILES = [
     undefined_if_missing: ["email", "mobile"],
     manual_course_input: {
       required: true,
-      label: "선택 입력. 과정코드 직접 입력",
-      note: "이 유형은 파일 안에 과정코드가 없어서, 아래 입력칸에 과정코드를 한 번만 적어 주세요. 예: `과정코드 : HLAP21547`",
+      label: "선택 입력. 과정코드 입력 방식",
+      note: "이 유형은 파일 안에 과정코드가 없어서, 아래에서 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나를 사용해 주세요. 직접 입력할 때는 과정코드를 한 번만 적어 주시면 됩니다. 예: `과정코드 : HLAP21547`",
       placeholder: "과정코드 : HLAP21547",
     },
     assumptions: [
@@ -1131,6 +1142,7 @@ export const PROFILES = [
     ],
     structure_recommendation: {
       pattern_id: "single_sheet_manual_course_header",
+      single_sheet_only: true,
       min_matches: 1,
       priority: 80,
       message_detail: "한 장짜리 추가 명단표 구조가 확인되었습니다. 아래 입력칸에 과정코드만 한 번 넣어 주세요.",
@@ -1188,6 +1200,7 @@ export const PROFILES = [
     ],
     structure_recommendation: {
       pattern_id: "grouped_single_sheet_application",
+      single_sheet_only: true,
       min_matches: 1,
       priority: 90,
       message_detail: "한 사람 아래에 여러 과정이 묶인 입과 신청서 구조가 확인되어, 이름과 ID를 아래 과정들에 자동으로 이어 붙이도록 맞췄습니다.",
@@ -1264,8 +1277,8 @@ export const PROFILES = [
     undefined_if_missing: ["email", "mobile"],
     manual_course_input: {
       required: true,
-      label: "선택 입력. 과정코드 직접 입력",
-      note: "이 유형은 업로드 양식의 과정코드 열만 비어 있는 경우에 씁니다. 아래 입력칸에 과정코드를 한 번만 적어 주세요. 예: `과정코드 : HLAP21547`",
+      label: "선택 입력. 과정코드 입력 방식",
+      note: "이 유형은 업로드 양식의 과정코드 열만 비어 있는 경우에 씁니다. 아래에서 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나를 사용해 주세요. 직접 입력할 때는 과정코드를 한 번만 적어 주시면 됩니다. 예: `과정코드 : HLAP21547`",
       placeholder: "과정코드 : HLAP21547",
     },
     assumptions: [
@@ -1275,6 +1288,7 @@ export const PROFILES = [
     ],
     structure_recommendation: {
       pattern_id: "blank_course_upload_template",
+      single_sheet_only: true,
       min_matches: 1,
       priority: 85,
       message_detail: "업로드 양식 헤더가 확인되었지만 과정코드 열이 비어 있습니다. 아래 입력칸에 과정코드를 한 번만 넣어 주세요.",
@@ -1331,9 +1345,9 @@ export const PROFILES = [
     undefined_if_missing: ["email", "mobile"],
     manual_course_input: {
       required: true,
-      label: "선택 입력. 과정코드 직접 입력",
-      note: "이 유형은 일반 대상자 명단만 있고 과정코드가 파일 밖에 있는 경우에 씁니다. 아래 입력칸에 과정코드를 한 번만 적어 주세요. 예: `과정코드 : HLAP21547`",
-      placeholder: "과정코드 : HLAP21547",
+      label: "선택 입력. 과정코드 입력 방식",
+      note: "이 유형은 일반 대상자 명단만 있고 과정코드가 파일 밖에 있는 경우에 씁니다. 아래에서 `직접 입력`, `첨부파일 경로 지정`, `첨부파일 선택` 중 하나를 사용해 주세요. 직접 입력할 때는 한 과정이면 `과정코드 : HLAP21547`처럼 한 줄만 넣고, 직종/구분처럼 파일 안에서 다시 나뉘면 `사무직 = HLAP21561`처럼 구분값별로 한 줄씩 넣어 주세요.",
+      placeholder: "과정코드 : HLAP21547\n\n또는\n사무직 = HLAP21561\n비사무직 = HLAP21547",
     },
     assumptions: [
       "첫 번째로 찾은 명단 헤더 아래 행들을 실제 대상자로 읽습니다.",
@@ -1363,6 +1377,7 @@ export const PROFILES = [
         ["아이디", "성명"],
       ],
       required_any: ["name", "user_id", "email", "mobile"],
+      manual_course_group_aliases: ["직종", "구분", "직군", "교육구분"],
       field_aliases: {
         course_code: ["과정코드"],
         user_id: ["사용아이디", "아이디", "id", "희망id", "희망아이디", "사번", "사원번호", "임직원번호"],
